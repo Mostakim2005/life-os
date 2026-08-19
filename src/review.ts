@@ -10,7 +10,8 @@ function fmtMinutes(value: number): string {
 
 function topSubject(stats: LifeOSStats): string {
   const entries = Object.entries(stats.subjectBreakdown).sort((a, b) => b[1].minutes - a[1].minutes);
-  return entries.length ? `${entries[0][0]} (${fmtMinutes(entries[0][1].minutes)})` : 'No study data yet';
+  const first = entries[0];
+  return first ? `${first[0]} (${fmtMinutes(first[1].minutes)})` : 'No study data yet';
 }
 
 function habitLine(settings: LifeOSSettings, stats: LifeOSStats): string {
@@ -18,7 +19,8 @@ function habitLine(settings: LifeOSSettings, stats: LifeOSStats): string {
     .map(([id, data]) => ({ habit: settings.habits.find((item) => item.id === id), data }))
     .filter((item) => item.habit)
     .sort((a, b) => b.data.pct - a.data.pct);
-  return entries.length ? `${entries[0].habit?.icon ?? ''} ${entries[0].habit?.name ?? ''} (${entries[0].data.pct}%)` : 'No habit data yet';
+  const first = entries[0];
+  return first ? `${first.habit?.icon ?? ''} ${first.habit?.name ?? ''} (${first.data.pct}%)` : 'No habit data yet';
 }
 
 export async function buildWeeklyReview(app: App, settings: LifeOSSettings, from: string, to: string): Promise<string> {

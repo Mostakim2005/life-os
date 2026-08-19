@@ -35,7 +35,7 @@ export function calculatePrayerTimes(options: PrayerCalculationOptions): Record<
   times.Maghrib = times.Sunset;
   times.Isha = noon + hourAngle(options.latitude, solar.declination, method.isha) / 15;
   const adjust = options.minuteAdjustment ?? 0;
-  return Object.fromEntries(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Sunset', 'Maghrib', 'Isha'].map((name) => [name, toTime(times[name] + adjust / 60)]));
+  return Object.fromEntries(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Sunset', 'Maghrib', 'Isha'].map((name) => [name, toTime((times[name] ?? noon) + adjust / 60)]));
 }
 
 function julianDay(date: string): number { const d = new Date(`${date}T12:00:00Z`); return d.getTime() / 86400000 + 2440587.5; }

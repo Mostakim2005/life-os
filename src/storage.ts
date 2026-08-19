@@ -176,7 +176,7 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[1]) as Partial<DailyRecord>;
+      const parsed = JSON.parse(jsonMatch[1] ?? '{}') as Partial<DailyRecord>;
       const empty = makeEmptyRecord(date, settings);
       return sanitizeDailyRecord(parsed, date, path, empty);
     } catch {
@@ -188,7 +188,7 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   record.schemaVersion = CURRENT_SCHEMA_VERSION;
   const yaml = text.match(/^---\n([\s\S]*?)\n---/);
   if (yaml) {
-    for (const line of yaml[1].split('\n')) {
+    for (const line of (yaml[1] ?? '').split('\n')) {
       const [key, ...rest] = line.split(':');
       const value = rest.join(':').trim().replace(/^"|"$/g, '');
       if (key === 'mood') record.mood = Number(value) || 3;
