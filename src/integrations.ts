@@ -70,8 +70,8 @@ export async function importMarkdownTasks(app: App, goalId?: string): Promise<Ri
     lines.forEach((line: string, index: number) => {
       const match = line.match(/^\s*- \[([ xX])\]\s+(.+)$/);
       if (!match) return;
-      const completed = match[1].toLowerCase() === 'x';
-      const body = match[2].trim();
+      const completed = (match[1] ?? '').toLowerCase() === 'x';
+      const body = (match[2] ?? '').trim();
       const metadata = parseInlineMetadata(body);
       if (goalId && metadata.goal !== goalId) return;
       result.push({
@@ -119,7 +119,11 @@ export function templaterTemplate(): string {
 function parseInlineMetadata(value: string): Record<string, string> {
   const result: Record<string, string> = {};
   const regex = /\[([^:\]]+)::\s*([^\]]*)\]/g; let match: RegExpExecArray | null;
-  while ((match = regex.exec(value)) !== null) result[match[1].trim()] = match[2].trim();
+  while ((match = regex.exec(value)) !== null) {
+    const key = match[1]?.trim();
+    const val = match[2]?.trim();
+    if (key) result[key] = val ?? '';
+  }
   return result;
 }
 function num(value?: string): number | undefined { if (!value) return undefined; const n = Number(value); return Number.isFinite(n) ? n : undefined; }
