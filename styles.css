@@ -1,13 +1,4 @@
-/*
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
-
-If your plugin does not need CSS, delete this file.
-
-*/
-
-/* Life OS UI */
 .life-os-root{box-sizing:border-box;width:100%;max-width:1600px;margin:0 auto;padding:clamp(12px,2vw,24px);color:var(--text-normal)}
 .life-os-root *, .life-os-root *::before, .life-os-root *::after{box-sizing:border-box}
 .life-os-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
@@ -35,7 +26,7 @@ If your plugin does not need CSS, delete this file.
 .life-os-timeline-scale{position:absolute;inset:0;display:grid;grid-template-columns:repeat(24,1fr)}
 .life-os-timeline-hour{font-size:8px;border-right:1px solid var(--background-modifier-border);padding:5px 2px;color:var(--text-muted)}
 .life-os-timeline-blocks{position:absolute;left:0;right:0;bottom:5px;height:30px}
-.life-os-time-block{position:absolute;top:0;bottom:0;border-radius:7px;padding:6px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--background-modifier-hover);border:1px solid var(--interactive-accent);box-sizing:border-box;cursor:pointer}
+.life-os-time-block{position:absolute;top:0;bottom:0;left:var(--life-os-left);width:var(--life-os-width);border-radius:7px;padding:6px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--background-modifier-hover);border:1px solid var(--interactive-accent);box-sizing:border-box;cursor:pointer}
 .life-os-time-block.is-actual{background:color-mix(in srgb,var(--interactive-accent) 20%,transparent)}
 .life-os-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.life-os-calendar-empty{min-height:34px}
 .life-os-calendar-day{min-height:42px;position:relative}.life-os-calendar-day.has-habit::after,.life-os-calendar-day.has-plan::before{content:'';position:absolute;bottom:4px;width:5px;height:5px;border-radius:50%}.life-os-calendar-day.has-habit::after{right:6px;background:var(--interactive-accent)}.life-os-calendar-day.has-plan::before{left:6px;background:var(--text-muted)}
@@ -45,7 +36,7 @@ If your plugin does not need CSS, delete this file.
 .life-os-week-day{position:relative;min-width:105px;height:1045px;border-right:1px solid var(--background-modifier-border);isolation:isolate}
 .life-os-week-day-head{position:sticky;top:0;height:38px;padding:6px 8px;background:var(--background-secondary);border-bottom:1px solid var(--background-modifier-border);font-weight:700;z-index:3}
 .life-os-week-slot{position:absolute;left:0;right:0;height:42px;border-top:1px solid var(--background-modifier-border)}
-.life-os-planner-block{position:absolute;left:3px;right:3px;min-height:24px;border-radius:7px;padding:4px 6px;font-size:11px;overflow:hidden;z-index:2;border:1px solid var(--interactive-accent);background:var(--background-secondary);cursor:pointer;touch-action:none}
+.life-os-planner-block{position:absolute;left:3px;right:3px;top:var(--life-os-top);height:var(--life-os-height);min-height:24px;border-radius:7px;padding:4px 6px;font-size:11px;overflow:hidden;z-index:2;border:1px solid var(--interactive-accent);background:var(--background-secondary);cursor:pointer;touch-action:none}
 .life-os-planner-block:focus-visible{outline:2px solid var(--interactive-accent);outline-offset:1px}.life-os-planner-block.is-actual{background:color-mix(in srgb,var(--interactive-accent) 22%,transparent)}
 .life-os-planner-block-title,.life-os-planner-block-meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.life-os-planner-block-title{font-weight:700}.life-os-planner-block-meta{font-size:10px;color:var(--text-muted)}
 .life-os-planner-resize{position:absolute;left:0;right:0;bottom:0;height:8px;cursor:ns-resize;border-radius:0 0 7px 7px;background:color-mix(in srgb,var(--interactive-accent) 22%,transparent)}
@@ -65,3 +56,13 @@ body.life-os-planner-dragging{cursor:grabbing!important;user-select:none}
 @media (max-width:650px){.life-os-root{padding:12px;max-width:100vw;overflow-x:hidden}.life-os-header{position:sticky;top:0;z-index:10;padding:8px 0;background:color-mix(in srgb,var(--background-primary) 92%,transparent);backdrop-filter:blur(8px)}.life-os-tabs{flex-wrap:nowrap}.life-os-kpis{grid-template-columns:repeat(2,1fr)}.life-os-priority-row{grid-template-columns:1fr auto}.life-os-header-controls button,.life-os-actions button{min-height:38px}.life-os-row input,.life-os-row select,.life-os-form-row input{min-height:36px}.life-os-week-grid{touch-action:pan-x;grid-template-columns:48px repeat(7,95px)}.life-os-planner-block{font-size:10px}.life-os-planner-block-meta{font-size:9px}.life-os-row,.life-os-stat-row{grid-template-columns:1fr auto}.life-os-reason{display:none}.life-os-unscheduled-grid{grid-template-columns:1fr}}
 @media (prefers-reduced-motion: reduce){.life-os-root *, .life-os-root *::before, .life-os-root *::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 @media (pointer:coarse){.life-os-root button,.life-os-root input,.life-os-root select,.life-os-root textarea{min-height:36px}.life-os-planner-resize{height:12px}}
+
+
+.life-os-week-hour{grid-row:var(--life-os-grid-row);grid-column:var(--life-os-grid-column)}
+.life-os-week-day{grid-column:var(--life-os-grid-column);grid-row:var(--life-os-grid-row)}
+.life-os-week-slot{top:var(--life-os-top)}
+.life-os-day-add{position:absolute;top:var(--life-os-top);right:6px;z-index:4}
+.life-os-planner-block{top:var(--life-os-top);height:var(--life-os-height)}
+.life-os-goal-fill{width:var(--life-os-width)}
+.life-os-chart-bar{height:var(--life-os-height)}
+.life-os-clipboard-fallback{position:fixed;opacity:0;pointer-events:none}
