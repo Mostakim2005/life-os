@@ -178,7 +178,7 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
     try {
       const json = jsonMatch[1];
       if (json === undefined) throw new Error('Missing Life OS JSON payload');
-      const parsed = JSON.parse(json) as Partial<DailyRecord>;
+      const parsed: Partial<DailyRecord> = JSON.parse(json);
       const empty = makeEmptyRecord(date, settings);
       return sanitizeDailyRecord(parsed, date, path, empty);
     } catch {

@@ -43,9 +43,9 @@ export async function loadRecordCached(app: App, date: string, settings: LifeOSS
 
 function trimCache(maxEntries: number): void {
   while (recordCache.size > maxEntries) {
-    const oldest = recordCache.keys().next().value;
-    if (!oldest) break;
-    recordCache.delete(oldest);
+    const first = recordCache.keys().next();
+    if (first.done || first.value === undefined) break;
+    recordCache.delete(first.value);
   }
 }
 

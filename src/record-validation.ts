@@ -128,7 +128,7 @@ export function sanitizeDailyRecord(input: Partial<DailyRecord>, date: string, n
         const normalizedValue: HabitEntry['value'] = Array.isArray(value)
           ? value.slice(0, 50).map((v) => Math.max(0, finiteNumber(v)))
           : value;
-        const rawNote = raw.note;
+        const rawNote = 'note' in raw ? raw.note : undefined;
         habits[id.slice(0, 100)] = { value: normalizedValue, note: typeof rawNote === 'string' ? rawNote.slice(0, 500) : undefined };
       }
     }
