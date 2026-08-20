@@ -1,7 +1,7 @@
-import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, setCssProps } from 'obsidian';
 import { calculateStats, collectRecords, lastNDays, calculateYearlyStats, monthlyTrendPoints } from './analytics';
 import { DEFAULT_HABITS, EXERCISE_PRESETS, FOOD_PRESETS } from './presets';
-import { DailyRecord, HabitDefinition, HabitEntry, LifeOSSettings, PrayerStatus, StudySessionType, TimelineEntry } from './types';
+import { DailyRecord, HabitDefinition, HabitEntry, LifeOSSettings, PrayerStatus, Priority, StudySessionType, TimelineEntry } from './types';
 import { buildMonthlyReview, buildWeeklyReview, getMonthRange, getWeekRange } from './review';
 import { DEFAULT_SETTINGS, ensureFolder, loadRecord, makeEmptyRecord, saveRecord, serializeRecord } from './storage';
 import { niceLabel } from './charting';
@@ -17,7 +17,6 @@ import { invalidateDateIndex, invalidateLifeOSCache } from './performance';
 import { migrateSettings } from './schema';
 import { lifeOSDataviewQuery, lifeOSDataviewSummaryQuery, lifeOSTemplaterTemplate, tasksMetadataGuide } from './integration-helpers';
 import { migrateLegacyDailyNotes } from './migrations';
-import { LIFE_OS_CSS } from './styles';
 import { editExercise, editMeal } from './editor-modals';
 
 const VIEW_TYPE = 'life-os-dashboard';
@@ -25,6 +24,16 @@ type LifeOSTab = 'daily' | 'planner' | 'reviews' | 'stats' | 'habits' | 'goals' 
 
 function isSettingsObject(value: unknown): value is Partial<LifeOSSettings> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toPriority(value: string): Priority {
+  return value === 'low' || value === 'high' || value === 'critical' ? value : 'medium';
+}
+
+function toPrayerCalculationMethod(value: string): LifeOSSettings['prayerCalculation']['method'] {
+  return value === 'karachi' || value === 'mwl' || value === 'isna' || value === 'egyptian' || value === 'tehran' || value === 'jafari'
+    ? value
+    : DEFAULT_SETTINGS.prayerCalculation.method;
 }
 
 function todayISO(): string {
@@ -37,7 +46,7 @@ export class LifeOSPlugin extends Plugin {
   settings: LifeOSSettings = DEFAULT_SETTINGS;
 
   async onload(): Promise<void> {
-    const stored = await this.loadData();
+    const stored: unknown = await this.loadData();
     const rawSettings: Partial<LifeOSSettings> | null = isSettingsObject(stored) ? stored : null;
     const migration = migrateSettings(rawSettings);
     this.settings = migration.settings;
@@ -194,7 +203,6 @@ class LifeOSView extends ItemView {
     const root = this.containerEl;
     root.empty();
     root.addClass('life-os-root');
-    this.injectStyles();
 
     const header = root.createDiv({ cls: 'life-os-header' });
     const title = header.createDiv();
@@ -468,8 +476,7 @@ class LifeOSView extends ItemView {
     const start = timeToMinutes(item.start);
     const duration = diffMinutes(item.start, item.end);
     const block = parent.createDiv({ cls: `life-os-time-block ${item.actual ? 'is-actual' : 'is-planned'}` });
-    block.style.left = `${Math.min(start / 1440, 1) * 100}%`;
-    block.style.width = `${Math.max(1, Math.min(duration / 1440, 1) * 100)}%`;
+    setCssProps(block, { left: `${Math.min(start / 1440, 1) * 100}%`, width: `${Math.max(1, Math.min(duration / 1440, 1) * 100)}%` });
     block.textContent = item.title;
     block.title = `${item.start}-${item.end} · ${item.type} · ${item.actual ? 'actual' : 'planned'}`;
     block.onclick = () => void this.editTimelineItem(item);
@@ -485,8 +492,7 @@ class LifeOSView extends ItemView {
     const record = date === this.selectedDate ? this.record : ((await loadRecord(this.app, date, this.plugin.settings)) ?? makeEmptyRecord(date, this.plugin.settings));
     const candidate = { id: 'candidate', title, start, end, type: safeType as TimelineEntry['type'], planned: true, actual: false };
     const conflicts = getConflicts([...record.timeline, candidate]).filter((conflict) => conflict.incoming.id === 'candidate' || conflict.existing.id === 'candidate');
-    const firstConflict = conflicts[0];
-    if (firstConflict && !window.confirm(`${firstConflict.message}\n\nAdd it anyway?`)) return;
+    if (conflicts.length && !window.confirm(`${conflicts[0].message}\n\nAdd it anyway?`)) return;
     record.timeline.push({ ...candidate, id: crypto.randomUUID() });
     await saveRecord(this.app, record, this.plugin.settings);
     if (date !== this.selectedDate) new Notice(`Planned ${title} on ${date}`);
@@ -513,9 +519,13 @@ class LifeOSView extends ItemView {
   private renderCalendarGrid(section: HTMLElement, month: string): void {
     section.querySelector('.life-os-calendar-grid')?.remove();
     const grid = section.createDiv({ cls: 'life-os-calendar-grid' });
-    const [year = Number(this.selectedDate.slice(0, 4)), mon = Number(this.selectedDate.slice(5, 7))] = month.split('-').map(Number);
-    const safeYear = Number.isFinite(year) ? year : Number(this.selectedDate.slice(0, 4));
-    const safeMonth = Number.isFinite(mon) && mon >= 1 && mon <= 12 ? mon : Number(this.selectedDate.slice(5, 7));
+    const [year = new Date().getFullYear(), mon = new Date().getMonth() + 1] = month.split('-').map(Number);
+    const fallbackYear = Number(this.selectedDate.slice(0, 4));
+    const fallbackMonth = Number(this.selectedDate.slice(5, 7));
+    const safeYear = Number.isFinite(year) ? year : (Number.isFinite(fallbackYear) ? fallbackYear : new Date().getFullYear());
+    const safeMonth = Number.isFinite(mon) && mon >= 1 && mon <= 12
+      ? mon
+      : (Number.isFinite(fallbackMonth) && fallbackMonth >= 1 && fallbackMonth <= 12 ? fallbackMonth : new Date().getMonth() + 1);
     const first = new Date(safeYear, safeMonth - 1, 1).getDay();
     const days = new Date(safeYear, safeMonth, 0).getDate();
     ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((day) => grid.createDiv({ text: day, cls: 'life-os-calendar-head' }));
@@ -623,16 +633,16 @@ class LifeOSView extends ItemView {
     const grid = root.createDiv({ cls: 'life-os-week-grid life-os-week-grid-interactive' });
     for (let hour = 0; hour < 24; hour++) {
       const label = grid.createDiv({ cls: 'life-os-week-hour', text: `${String(hour).padStart(2, '0')}:00` });
-      label.style.gridRow = String(hour + 2); label.style.gridColumn = '1';
+      setCssProps(label, { 'grid-row': String(hour + 2), 'grid-column': '1' });
     }
     for (let day = 0; day < 7; day++) {
       const date = shiftDate(range.from, day);
       const column = grid.createDiv({ cls: 'life-os-week-day' });
       column.dataset.date = date;
-      column.style.gridColumn = String(day + 2); column.style.gridRow = '1 / span 25';
+      setCssProps(column, { 'grid-column': String(day + 2), 'grid-row': '1 / span 25' });
       const head = column.createDiv({ cls: 'life-os-week-day-head' });
       head.createDiv({ text: formatDay(date) }); head.createDiv({ text: date.slice(5), cls: 'life-os-help' });
-      for (let h = 0; h < 24; h++) { const slot = column.createDiv({ cls: 'life-os-week-slot' }); slot.style.top = `${38 + h * 42}px`; }
+      for (let h = 0; h < 24; h++) { const slot = column.createDiv({ cls: 'life-os-week-slot' }); setCssProps(slot, { top: `${38 + h * 42}px` }); }
       column.addEventListener('dragover', (event) => { if (this.plugin.settings.planningPreferences.enableDragUnscheduled) event.preventDefault(); });
       column.addEventListener('drop', (event) => { event.preventDefault(); void this.dropUnscheduledOnPlanner(event, column, date); });
       const generated = generatedEntries(this.plugin.settings, date);
@@ -646,7 +656,7 @@ class LifeOSView extends ItemView {
       }
       for (const item of entries) this.createPlannerBlock(column, date, item);
       const planButton = column.createEl('button', { text: '+', cls: 'life-os-day-add' });
-      planButton.style.top = '6px'; planButton.onclick = async () => { await this.addTimelineItem(date); };
+      setCssProps(planButton, { top: '6px' }); planButton.onclick = () => { void this.addTimelineItem(date).catch((error: unknown) => console.error('Life OS plan-time action failed', error)); };
     }
   }
 
@@ -736,8 +746,8 @@ class LifeOSView extends ItemView {
     if (item.id.startsWith('rule:')) block.dataset.rule = 'true';
     const start = timeToMinutes(item.start);
     const duration = diffMinutes(item.start, item.end);
-    block.style.top = `${38 + (start / 60) * 42}px`;
-    block.style.height = `${Math.max(24, (duration / 60) * 42 - 2)}px`;
+    setCssProps(block, { top: `${38 + (start / 60) * 42}px` });
+    setCssProps(block, { height: `${Math.max(24, (duration / 60) * 42 - 2)}px` });
     block.createDiv({ text: item.title, cls: 'life-os-planner-block-title' });
     block.createDiv({ text: `${item.start}–${item.end} · ${item.type}`, cls: 'life-os-planner-block-meta' });
     const resize = block.createDiv({ cls: 'life-os-planner-resize' });
@@ -755,7 +765,7 @@ class LifeOSView extends ItemView {
       document.body.classList.remove('life-os-planner-dragging');
       const sourceDate = date;
       const targetNode = document.elementFromPoint(event.clientX, event.clientY);
-      const targetEl = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') as HTMLElement | null : null;
+      const targetEl = targetNode instanceof HTMLElement ? targetNode.closest<HTMLElement>('.life-os-week-day') : null;
       const targetDate = targetEl?.dataset.date ?? sourceDate;
       const sourceRecord = (await loadRecord(this.app, sourceDate, this.plugin.settings)) ?? makeEmptyRecord(sourceDate, this.plugin.settings);
       const ruleGenerated = item.id.startsWith('rule:');
@@ -783,8 +793,8 @@ class LifeOSView extends ItemView {
         if (conflicts.length) {
           const conflict = conflicts[0];
           if (conflict) new Notice(`Planner conflict: ${conflict.message}`);
-          block.style.top = `${38 + (originalStart / 60) * 42}px`;
-          block.style.height = `${Math.max(24, (originalDuration / 60) * 42 - 2)}px`;
+          setCssProps(block, { top: `${38 + (originalStart / 60) * 42}px` });
+          setCssProps(block, { height: `${Math.max(24, (originalDuration / 60) * 42 - 2)}px` });
           return;
         }
         if (ruleGenerated) {
@@ -814,10 +824,10 @@ class LifeOSView extends ItemView {
       const delta = event.clientY - pointerStartY;
       if (mode === 'drag') {
         const provisional = snapMinutes(originalStart + (delta / 42) * 60, this.plugin.settings.planningPreferences.slotMinutes);
-        block.style.top = `${38 + (provisional / 60) * 42}px`;
+        setCssProps(block, { top: `${38 + (provisional / 60) * 42}px` });
       } else {
         const provisional = snapMinutes(originalDuration + (delta / 42) * 60, this.plugin.settings.planningPreferences.slotMinutes);
-        block.style.height = `${Math.max(24, (Math.max(15, provisional) / 60) * 42 - 2)}px`;
+        setCssProps(block, { height: `${Math.max(24, (Math.max(15, provisional) / 60) * 42 - 2)}px` });
       }
     };
     const begin = (event: PointerEvent, nextMode: 'drag' | 'resize'): void => {
@@ -825,14 +835,14 @@ class LifeOSView extends ItemView {
       event.preventDefault(); event.stopPropagation();
       mode = nextMode; pointerStartY = event.clientY; originalStart = timeToMinutes(item.start); originalDuration = diffMinutes(item.start, item.end); moved = false;
       document.body.classList.add('life-os-planner-dragging');
-      document.addEventListener('pointermove', move); document.addEventListener('pointerup', finish);
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', (event) => { void finish(event); });
     };
     block.addEventListener('pointerdown', (event) => {
-      if ((event.target as HTMLElement).closest('.life-os-planner-resize')) return;
+      const target = event.target; if (target instanceof HTMLElement && target.closest('.life-os-planner-resize')) return;
       begin(event, 'drag');
     });
     resize.addEventListener('pointerdown', (event) => begin(event, 'resize'));
-    block.ondblclick = async (event) => { event.stopPropagation(); this.selectedDate = date; if (item.id.startsWith('rule:')) { this.activeTab = 'habits'; await this.render(); } else { await this.loadAndEditCrossDayTimeline(date, item.id); } };
+    block.ondblclick = (event) => { void (async () => { event.stopPropagation(); this.selectedDate = date; if (item.id.startsWith('rule:')) { this.activeTab = 'habits'; await this.render(); } else { await this.loadAndEditCrossDayTimeline(date, item.id); } })().catch((error: unknown) => console.error('Life OS planner edit failed', error)); };
     block.onclick = () => { if (!moved) block.classList.add('life-os-planner-block-pulse'); window.setTimeout(() => block.classList.remove('life-os-planner-block-pulse'), 180); };
   }
 
@@ -858,7 +868,7 @@ class LifeOSView extends ItemView {
     const format = controls.createEl('select');
     (['md', 'json', 'csv'] as ReportFormat[]).forEach((f) => format.add(new Option(f.toUpperCase(), f)));
     const exportButton = controls.createEl('button', { text: 'Export report' });
-    exportButton.onclick = async () => { await this.plugin.exportReport(this.selectedDate, period.value as ReportPeriod, format.value as ReportFormat); };
+    exportButton.onclick = () => { void this.plugin.exportReport(this.selectedDate, period.value as ReportPeriod, format.value as ReportFormat).catch((error: unknown) => console.error('Life OS report export failed', error)); };
     const range = root.createDiv({ cls: 'life-os-report-range' });
     const report = await buildReport(this.app, this.plugin.settings, this.selectedDate, 'month');
     const cards = root.createDiv({ cls: 'life-os-kpis' });
@@ -913,7 +923,7 @@ class LifeOSView extends ItemView {
       priority.onchange = async () => { goal.priority = priority.value as typeof goal.priority; await this.plugin.saveData(this.plugin.settings); await this.render(); };
       const meta = card.createDiv({ text: `${goalSummary(goal)} · ${metricLabel(goal.metric)}`, cls: 'life-os-help' });
       const bar = card.createDiv({ cls: 'life-os-goal-bar' });
-      bar.createDiv({ cls: 'life-os-goal-fill' }).style.width = `${goalProgressPct(goal)}%`;
+      setCssProps(bar.createDiv({ cls: 'life-os-goal-fill' }), { width: `${goalProgressPct(goal)}%` });
       const row = card.createDiv({ cls: 'life-os-goal-actions' });
       const metric = row.createEl('select');
       Object.entries({ manual: 'Manual', 'task-completion': 'Task completion', 'habit-consistency': 'Habit consistency', 'study-minutes': 'Study minutes', 'exercise-minutes': 'Exercise minutes', 'prayer-completion': 'Prayer completion' }).forEach(([value, label]) => metric.add(new Option(label, value)));
@@ -989,7 +999,7 @@ class LifeOSView extends ItemView {
     points.forEach((point) => {
       const item = plot.createDiv({ cls: 'life-os-chart-point' });
       const bar = item.createDiv({ cls: 'life-os-chart-bar' });
-      bar.style.height = `${Math.max(3, (point.value / max) * 100)}%`;
+      setCssProps(bar, { height: `${Math.max(3, (point.value / max) * 100)}%` });
       bar.title = `${point.label}: ${niceLabel(point.value)}${suffix}`;
       item.createDiv({ text: point.label, cls: 'life-os-chart-label' });
     });
@@ -1055,7 +1065,7 @@ class LifeOSView extends ItemView {
     const add = form.createEl('button', { text: '＋ Add rich task' });
     add.onclick = async () => {
       if (!title.value.trim()) { new Notice('Enter a task title.'); return; }
-      const task = { id: crypto.randomUUID(), title: title.value.trim(), completed: false, optional: optional.checked, priority: priority.value as any, durationMin: Number(duration.value) || 30, deadline: deadline.value || undefined, goalId: goal.value || undefined };
+      const task = { id: crypto.randomUUID(), title: title.value.trim(), completed: false, optional: optional.checked, priority: toPriority(priority.value), durationMin: Number(duration.value) || 30, deadline: deadline.value || undefined, goalId: goal.value || undefined };
       this.record.richTasks = [...(this.record.richTasks ?? []), task];
       if (!this.record.tasksPlanned.includes(task.title)) this.record.tasksPlanned.push(task.title);
       await this.persist(true); await this.render();
@@ -1094,13 +1104,6 @@ class LifeOSView extends ItemView {
   section(parent: HTMLElement, title: string): HTMLElement { const section = parent.createDiv({ cls: 'life-os-section' }); section.createEl('h2', { text: title }); return section; }
   async persist(notice: boolean): Promise<void> { this.record.updatedAt = new Date().toISOString(); await saveRecord(this.app, this.record, this.plugin.settings); if (notice) new Notice('Life OS saved'); }
 
-  injectStyles(): void {
-    if (document.getElementById('life-os-styles')) return;
-    const style = document.createElement('style'); style.id = 'life-os-styles';
-    style.textContent = LIFE_OS_CSS;
-    /* Legacy inline stylesheet removed in v0.10; styles live in src/styles.ts. */
-    document.head.appendChild(style);
-  }
 }
 
 class LifeOSSettingTab extends PluginSettingTab {
@@ -1109,53 +1112,62 @@ class LifeOSSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this; containerEl.empty();
     new Setting(containerEl).setName('Life OS').setDesc('Local-first daily life, study, planning and review tracker.');
-    new Setting(containerEl).setName('Daily notes folder').addText((text: any) => text.setValue(this.plugin.settings.dailyNotesFolder).onChange(async (value: string) => { this.plugin.settings.dailyNotesFolder = value.trim() || DEFAULT_SETTINGS.dailyNotesFolder; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Export/review folder').addText((text: any) => text.setValue(this.plugin.settings.dashboardNoteFolder).onChange(async (value: string) => { this.plugin.settings.dashboardNoteFolder = value.trim() || DEFAULT_SETTINGS.dashboardNoteFolder; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Reports folder').addText((text: any) => text.setValue(this.plugin.settings.reportFolder).onChange(async (value: string) => { this.plugin.settings.reportFolder = value.trim() || DEFAULT_SETTINGS.reportFolder; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Automatic prayer-time calculation').setDesc('Calculate prayer times from date, latitude, longitude, method and madhab. Turn off to use manual default times.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.prayerCalculation.enabled).onChange(async (value: boolean) => { this.plugin.settings.prayerCalculation.enabled = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Prayer latitude').addText((text: any) => text.setValue(String(this.plugin.settings.prayerCalculation.latitude)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.latitude = Number(value) || this.plugin.settings.prayerCalculation.latitude; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Prayer longitude').addText((text: any) => text.setValue(String(this.plugin.settings.prayerCalculation.longitude)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.longitude = Number(value) || this.plugin.settings.prayerCalculation.longitude; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Prayer calculation method').addDropdown((dropdown: any) => { ['karachi','mwl','isna','egyptian','tehran','jafari'].forEach((v: string) => dropdown.addOption(v, v.toUpperCase())); dropdown.setValue(this.plugin.settings.prayerCalculation.method).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.method = value as any; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Asr madhab').addDropdown((dropdown: any) => { dropdown.addOption('hanafi','Hanafi'); dropdown.addOption('shafii','Shafi / standard'); dropdown.setValue(this.plugin.settings.prayerCalculation.madhab).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.madhab = value as any; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Prayer minute adjustment').setDesc('Add/subtract minutes from calculated times.').addText((text: any) => text.setValue(String(this.plugin.settings.prayerCalculation.minuteAdjustment)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.minuteAdjustment = Number(value) || 0; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Daily notes folder').addText((text) => text.setValue(this.plugin.settings.dailyNotesFolder).onChange(async (value: string) => { this.plugin.settings.dailyNotesFolder = value.trim() || DEFAULT_SETTINGS.dailyNotesFolder; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Export/review folder').addText((text) => text.setValue(this.plugin.settings.dashboardNoteFolder).onChange(async (value: string) => { this.plugin.settings.dashboardNoteFolder = value.trim() || DEFAULT_SETTINGS.dashboardNoteFolder; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Reports folder').addText((text) => text.setValue(this.plugin.settings.reportFolder).onChange(async (value: string) => { this.plugin.settings.reportFolder = value.trim() || DEFAULT_SETTINGS.reportFolder; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Automatic prayer-time calculation').setDesc('Calculate prayer times from date, latitude, longitude, method and madhab. Turn off to use manual default times.').addToggle((toggle) => toggle.setValue(this.plugin.settings.prayerCalculation.enabled).onChange(async (value: boolean) => { this.plugin.settings.prayerCalculation.enabled = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Prayer latitude').addText((text) => text.setValue(String(this.plugin.settings.prayerCalculation.latitude)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.latitude = Number(value) || this.plugin.settings.prayerCalculation.latitude; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Prayer longitude').addText((text) => text.setValue(String(this.plugin.settings.prayerCalculation.longitude)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.longitude = Number(value) || this.plugin.settings.prayerCalculation.longitude; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Prayer calculation method').addDropdown((dropdown) => { ['karachi','mwl','isna','egyptian','tehran','jafari'].forEach((v: string) => dropdown.addOption(v, v.toUpperCase())); dropdown.setValue(this.plugin.settings.prayerCalculation.method).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.method = toPrayerCalculationMethod(value); await this.plugin.saveData(this.plugin.settings); }); });
+    new Setting(containerEl).setName('Asr madhab').addDropdown((dropdown) => { dropdown.addOption('hanafi','Hanafi'); dropdown.addOption('shafii','Shafi / standard'); dropdown.setValue(this.plugin.settings.prayerCalculation.madhab).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.madhab = value === 'hanafi' ? 'hanafi' : 'shafii'; await this.plugin.saveData(this.plugin.settings); }); });
+    new Setting(containerEl).setName('Prayer minute adjustment').setDesc('Add/subtract minutes from calculated times.').addText((text) => text.setValue(String(this.plugin.settings.prayerCalculation.minuteAdjustment)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.minuteAdjustment = Number(value) || 0; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Prayer & integration features').setHeading();
     new Setting(containerEl).setName('Default prayer times').setDesc('Copied into newly-created daily records when automatic calculation is disabled.');
-    Object.keys(this.plugin.settings.defaultPrayerTimes).forEach((name) => new Setting(containerEl).setName(name).addText((text: any) => text.setValue(this.plugin.settings.defaultPrayerTimes[name]).onChange(async (value: string) => { this.plugin.settings.defaultPrayerTimes[name] = value; await this.plugin.saveData(this.plugin.settings); })));
-    new Setting(containerEl).setName('Study subjects').setDesc('Comma-separated preset subjects.').addText((text: any) => text.setValue(this.plugin.settings.defaultStudySubjects.join(', ')).onChange(async (value: string) => { this.plugin.settings.defaultStudySubjects = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
+    Object.keys(this.plugin.settings.defaultPrayerTimes).forEach((name) => new Setting(containerEl).setName(name).addText((text) => text.setValue(this.plugin.settings.defaultPrayerTimes[name]).onChange(async (value: string) => { this.plugin.settings.defaultPrayerTimes[name] = value; await this.plugin.saveData(this.plugin.settings); })));
+    new Setting(containerEl).setName('Study subjects').setDesc('Comma-separated preset subjects.').addText((text) => text.setValue(this.plugin.settings.defaultStudySubjects.join(', ')).onChange(async (value: string) => { this.plugin.settings.defaultStudySubjects = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Habits').setDesc('Enable or disable starter habits.').setHeading();
-    this.plugin.settings.habits.forEach((habit) => new Setting(containerEl).setName(`${habit.icon} ${habit.name} · ${habit.type}`).addToggle((toggle: any) => toggle.setValue(habit.enabled).onChange(async (value: boolean) => { habit.enabled = value; await this.plugin.saveData(this.plugin.settings); })));
-    new Setting(containerEl).setName('Food categories').setDesc('Comma-separated preset categories.').addText((text: any) => text.setValue(this.plugin.settings.enabledFoodPresetCategories.join(', ')).onChange(async (value: string) => { this.plugin.settings.enabledFoodPresetCategories = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Intelligent scheduling').setDesc('Turn the planning assistant on/off.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.intelligentScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.intelligentScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Show free-time discovery').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showFreeTime).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showFreeTime = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Conflict suggestions').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showConflictSuggestions).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showConflictSuggestions = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Drag unscheduled tasks/study into planner').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.enableDragUnscheduled).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.enableDragUnscheduled = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Adaptive rescheduling suggestions').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.enableAdaptiveRescheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.enableAdaptiveRescheduling = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Goal-aware adaptive priorities').setDesc('Use active goal priority and deadlines when ranking suggested planning slots.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.goalAwareScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.goalAwareScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Planning conflict badges').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showPlanningBadges).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showPlanningBadges = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Planner snap minutes').addDropdown((dropdown: any) => { [5, 10, 15, 30].forEach((v: number) => dropdown.addOption(String(v), `${v} minutes`)); dropdown.setValue(String(this.plugin.settings.planningPreferences.slotMinutes)); dropdown.onChange(async (value: string) => { this.plugin.settings.planningPreferences.slotMinutes = Number(value) || 15; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text: any) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange(async (value: string) => { const parts = value.split(/[–-]/); if (parts.length === 2 && parts[0] && parts[1]) { this.plugin.settings.planningPreferences.quietHoursStart = parts[0].trim(); this.plugin.settings.planningPreferences.quietHoursEnd = parts[1].trim(); await this.plugin.saveData(this.plugin.settings); } }));
+    this.plugin.settings.habits.forEach((habit) => new Setting(containerEl).setName(`${habit.icon} ${habit.name} · ${habit.type}`).addToggle((toggle) => toggle.setValue(habit.enabled).onChange(async (value: boolean) => { habit.enabled = value; await this.plugin.saveData(this.plugin.settings); })));
+    new Setting(containerEl).setName('Food categories').setDesc('Comma-separated preset categories.').addText((text) => text.setValue(this.plugin.settings.enabledFoodPresetCategories.join(', ')).onChange(async (value: string) => { this.plugin.settings.enabledFoodPresetCategories = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Intelligent scheduling').setDesc('Turn the planning assistant on/off.').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.intelligentScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.intelligentScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Show free-time discovery').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.showFreeTime).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showFreeTime = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Conflict suggestions').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.showConflictSuggestions).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showConflictSuggestions = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Drag unscheduled tasks/study into planner').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.enableDragUnscheduled).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.enableDragUnscheduled = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Adaptive rescheduling suggestions').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.enableAdaptiveRescheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.enableAdaptiveRescheduling = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Goal-aware adaptive priorities').setDesc('Use active goal priority and deadlines when ranking suggested planning slots.').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.goalAwareScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.goalAwareScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Planning conflict badges').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.showPlanningBadges).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showPlanningBadges = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Planner snap minutes').addDropdown((dropdown) => { [5, 10, 15, 30].forEach((v: number) => dropdown.addOption(String(v), `${v} minutes`)); dropdown.setValue(String(this.plugin.settings.planningPreferences.slotMinutes)); dropdown.onChange(async (value: string) => { this.plugin.settings.planningPreferences.slotMinutes = Number(value) || 15; await this.plugin.saveData(this.plugin.settings); }); });
+    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange(async (value: string) => { const parts = value.split(/[–-]/); const start = parts[0]; const end = parts[1]; if (start !== undefined && end !== undefined) { this.plugin.settings.planningPreferences.quietHoursStart = start.trim(); this.plugin.settings.planningPreferences.quietHoursEnd = end.trim(); await this.plugin.saveData(this.plugin.settings); } }));
     new Setting(containerEl).setName('Performance & mobile optimization').setHeading();
-    new Setting(containerEl).setName('Analytics cache').setDesc('Keep parsed daily records in memory to avoid repeated vault reads.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.performance.cacheEnabled).onChange(async (value: boolean) => { this.plugin.settings.performance.cacheEnabled = value; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Cache TTL (minutes)').addText((text: any) => text.setValue(String(this.plugin.settings.performance.cacheTtlMinutes)).onChange(async (value: string) => { const n = Math.min(1440, Math.max(1, Number(value) || 10)); this.plugin.settings.performance.cacheTtlMinutes = n; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Maximum cached daily records').setDesc('Lower values reduce RAM usage on phones.').addText((text: any) => text.setValue(String(this.plugin.settings.performance.maxCachedDays)).onChange(async (value: string) => { const n = Math.min(5000, Math.max(50, Number(value) || 500)); this.plugin.settings.performance.maxCachedDays = n; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Analytics lookback').setDesc('Default statistics window for detailed analytics.').addDropdown((dropdown: any) => { [30, 60, 90, 180, 365].forEach((n) => dropdown.addOption(String(n), `${n} days`)); dropdown.setValue(String(this.plugin.settings.performance.analyticsLookbackDays)); dropdown.onChange(async (value: string) => { this.plugin.settings.performance.analyticsLookbackDays = Number(value) || 90; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Lazy analytics UI').setDesc('Render expensive analytics only after the statistics view is opened.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.performance.lazyRenderAnalytics).onChange(async (value: boolean) => { this.plugin.settings.performance.lazyRenderAnalytics = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Analytics cache').setDesc('Keep parsed daily records in memory to avoid repeated vault reads.').addToggle((toggle) => toggle.setValue(this.plugin.settings.performance.cacheEnabled).onChange(async (value: boolean) => { this.plugin.settings.performance.cacheEnabled = value; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Cache TTL (minutes)').addText((text) => text.setValue(String(this.plugin.settings.performance.cacheTtlMinutes)).onChange(async (value: string) => { const n = Math.min(1440, Math.max(1, Number(value) || 10)); this.plugin.settings.performance.cacheTtlMinutes = n; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Maximum cached daily records').setDesc('Lower values reduce RAM usage on phones.').addText((text) => text.setValue(String(this.plugin.settings.performance.maxCachedDays)).onChange(async (value: string) => { const n = Math.min(5000, Math.max(50, Number(value) || 500)); this.plugin.settings.performance.maxCachedDays = n; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Analytics lookback').setDesc('Default statistics window for detailed analytics.').addDropdown((dropdown) => { [30, 60, 90, 180, 365].forEach((n) => dropdown.addOption(String(n), `${n} days`)); dropdown.setValue(String(this.plugin.settings.performance.analyticsLookbackDays)); dropdown.onChange(async (value: string) => { this.plugin.settings.performance.analyticsLookbackDays = Number(value) || 90; await this.plugin.saveData(this.plugin.settings); }); });
+    new Setting(containerEl).setName('Lazy analytics UI').setDesc('Render expensive analytics only after the statistics view is opened.').addToggle((toggle) => toggle.setValue(this.plugin.settings.performance.lazyRenderAnalytics).onChange(async (value: boolean) => { this.plugin.settings.performance.lazyRenderAnalytics = value; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Native integration helpers').setHeading();
     new Setting(containerEl).setName('Tasks metadata guide').setDesc('Use the command palette to copy a Life OS metadata example for Tasks-style Markdown.');
     new Setting(containerEl).setName('Dataview queries').setDesc('Use the command palette to copy ready-made Life OS Dataview queries.');
     new Setting(containerEl).setName('Templater template').setDesc('Use the command palette to copy the Life OS daily template.');
     const integrationStatus = buildIntegrationSnapshot(this.app, this.plugin.settings, []);
     new Setting(containerEl).setName('Integration status').setDesc(`Tasks: ${integrationStatus.tasksPluginDetected ? 'detected' : 'not detected'} · Dataview: ${integrationStatus.dataviewDetected ? 'detected' : 'not detected'} · Templater: ${integrationStatus.templaterDetected ? 'detected' : 'not detected'}`);
-    new Setting(containerEl).setName('Use Tasks integration').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.tasks).onChange(async (value: boolean) => { this.plugin.settings.integrations.tasks = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Use Dataview helpers').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.dataview).onChange(async (value: boolean) => { this.plugin.settings.integrations.dataview = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Use Templater helpers').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.templater).onChange(async (value: boolean) => { this.plugin.settings.integrations.templater = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Automatic task import').setDesc('Off by default for performance. When enabled, task imports should be run deliberately from the command palette.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.autoImportTasks).onChange(async (value: boolean) => { this.plugin.settings.integrations.autoImportTasks = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Use Tasks integration').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.tasks).onChange(async (value: boolean) => { this.plugin.settings.integrations.tasks = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Use Dataview helpers').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.dataview).onChange(async (value: boolean) => { this.plugin.settings.integrations.dataview = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Use Templater helpers').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.templater).onChange(async (value: boolean) => { this.plugin.settings.integrations.templater = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Automatic task import').setDesc('Off by default for performance. When enabled, task imports should be run deliberately from the command palette.').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.autoImportTasks).onChange(async (value: boolean) => { this.plugin.settings.integrations.autoImportTasks = value; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Migration safety').setHeading();
-    new Setting(containerEl).setName('Create migration backups').setDesc('Keep the original daily note before a migration changes it.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.migration.createBackups).onChange(async (value: boolean) => { this.plugin.settings.migration.createBackups = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Restore default habits').addButton((button: any) => button.setButtonText('Restore').onClick(async () => { this.plugin.settings.habits = DEFAULT_HABITS.map((habit) => ({ ...habit, subtasks: habit.subtasks ? [...habit.subtasks] : undefined })); await this.plugin.saveData(this.plugin.settings); this.display(); new Notice('Default habits restored'); }));
+    new Setting(containerEl).setName('Create migration backups').setDesc('Keep the original daily note before a migration changes it.').addToggle((toggle) => toggle.setValue(this.plugin.settings.migration.createBackups).onChange(async (value: boolean) => { this.plugin.settings.migration.createBackups = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Restore default habits').addButton((button) => button.setButtonText('Restore').onClick(() => { void this.restoreDefaultHabits(); }));
+  }
+
+  private async restoreDefaultHabits(): Promise<void> {
+    this.plugin.settings.habits = DEFAULT_HABITS.map((habit) => ({
+      ...habit,
+      subtasks: habit.subtasks ? [...habit.subtasks] : undefined,
+    }));
+    await this.plugin.saveData(this.plugin.settings);
+    this.display();
+    new Notice('Default habits restored');
   }
 }
-
 
 async function copyText(value: string, successMessage: string): Promise<void> {
   try {
@@ -1166,7 +1178,7 @@ async function copyText(value: string, successMessage: string): Promise<void> {
     }
     const textarea = document.createElement('textarea');
     textarea.value = value;
-    textarea.style.position = 'fixed'; textarea.style.opacity = '0';
+    setCssProps(textarea, { position: 'fixed', opacity: '0' });
     document.body.appendChild(textarea);
     textarea.select();
     const copied = document.execCommand('copy');

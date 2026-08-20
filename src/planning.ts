@@ -79,11 +79,9 @@ export function getConflicts(entries: TimelineEntry[]): PlanningConflict[] {
   // end, there cannot be any later overlap with the current item.
   for (let i = 0; i < sorted.length; i++) {
     const incoming = sorted[i];
-    if (!incoming) continue;
     const incomingEnd = timeToMinutes(incoming.end);
     for (let j = i + 1; j < sorted.length; j++) {
       const existing = sorted[j];
-      if (!existing) continue;
       if (timeToMinutes(existing.start) >= incomingEnd) break;
       const overlap = overlapMinutes(incoming.start, incoming.end, existing.start, existing.end);
       if (!overlap) continue;

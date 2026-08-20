@@ -176,7 +176,9 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[1] ?? '{}') as Partial<DailyRecord>;
+      const jsonBody = jsonMatch[1];
+      if (jsonBody === undefined) throw new Error('Missing JSON body');
+      const parsed = JSON.parse(jsonBody) as Partial<DailyRecord>;
       const empty = makeEmptyRecord(date, settings);
       return sanitizeDailyRecord(parsed, date, path, empty);
     } catch {
@@ -188,9 +190,11 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   record.schemaVersion = CURRENT_SCHEMA_VERSION;
   const yaml = text.match(/^---\n([\s\S]*?)\n---/);
   if (yaml) {
-    for (const line of (yaml[1] ?? '').split('\n')) {
-      const [key, ...rest] = line.split(':');
-      const value = rest.join(':').trim().replace(/^"|"$/g, '');
+    for (const line of yaml[1].split('\n')) {
+      const parts = line.split(':');
+      const key = parts[0];
+      if (!key) continue;
+      const value = parts.slice(1).join(':').trim().replace(/^"|"$/g, '');
       if (key === 'mood') record.mood = Number(value) || 3;
       if (key === 'energy') record.energy = Number(value) || 3;
       if (key === 'sleepHours') record.sleepHours = Number(value) || 0;
