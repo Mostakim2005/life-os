@@ -190,7 +190,8 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   record.schemaVersion = CURRENT_SCHEMA_VERSION;
   const yaml = text.match(/^---\n([\s\S]*?)\n---/);
   if (yaml) {
-    for (const line of yaml[1].split('\n')) {
+    const yamlBody = yaml[1];
+    if (yamlBody !== undefined) for (const line of yamlBody.split('\n')) {
       const parts = line.split(':');
       const key = parts[0];
       if (!key) continue;

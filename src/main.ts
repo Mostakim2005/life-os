@@ -1,4 +1,4 @@
-import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, setCssProps } from 'obsidian';
+import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import { calculateStats, collectRecords, lastNDays, calculateYearlyStats, monthlyTrendPoints } from './analytics';
 import { DEFAULT_HABITS, EXERCISE_PRESETS, FOOD_PRESETS } from './presets';
 import { DailyRecord, HabitDefinition, HabitEntry, LifeOSSettings, PrayerStatus, Priority, StudySessionType, TimelineEntry } from './types';
@@ -40,6 +40,11 @@ function todayISO(): string {
   const d = new Date();
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
+}
+
+function setInlineStyles(element: HTMLElement, styles: Record<string, string>): void {
+  const serialized = Object.entries(styles).map(([property, value]) => `${property}: ${value}`).join('; ');
+  element.setAttribute('style', serialized);
 }
 
 export class LifeOSPlugin extends Plugin {
@@ -476,7 +481,7 @@ class LifeOSView extends ItemView {
     const start = timeToMinutes(item.start);
     const duration = diffMinutes(item.start, item.end);
     const block = parent.createDiv({ cls: `life-os-time-block ${item.actual ? 'is-actual' : 'is-planned'}` });
-    setCssProps(block, { left: `${Math.min(start / 1440, 1) * 100}%`, width: `${Math.max(1, Math.min(duration / 1440, 1) * 100)}%` });
+    setInlineStyles(block, { left: `${Math.min(start / 1440, 1) * 100}%`, width: `${Math.max(1, Math.min(duration / 1440, 1) * 100)}%` });
     block.textContent = item.title;
     block.title = `${item.start}-${item.end} · ${item.type} · ${item.actual ? 'actual' : 'planned'}`;
     block.onclick = () => void this.editTimelineItem(item);
@@ -492,7 +497,8 @@ class LifeOSView extends ItemView {
     const record = date === this.selectedDate ? this.record : ((await loadRecord(this.app, date, this.plugin.settings)) ?? makeEmptyRecord(date, this.plugin.settings));
     const candidate = { id: 'candidate', title, start, end, type: safeType as TimelineEntry['type'], planned: true, actual: false };
     const conflicts = getConflicts([...record.timeline, candidate]).filter((conflict) => conflict.incoming.id === 'candidate' || conflict.existing.id === 'candidate');
-    if (conflicts.length && !window.confirm(`${conflicts[0].message}\n\nAdd it anyway?`)) return;
+    const firstConflict = conflicts[0];
+    if (firstConflict && !window.confirm(`${firstConflict.message}\n\nAdd it anyway?`)) return;
     record.timeline.push({ ...candidate, id: crypto.randomUUID() });
     await saveRecord(this.app, record, this.plugin.settings);
     if (date !== this.selectedDate) new Notice(`Planned ${title} on ${date}`);
@@ -633,16 +639,16 @@ class LifeOSView extends ItemView {
     const grid = root.createDiv({ cls: 'life-os-week-grid life-os-week-grid-interactive' });
     for (let hour = 0; hour < 24; hour++) {
       const label = grid.createDiv({ cls: 'life-os-week-hour', text: `${String(hour).padStart(2, '0')}:00` });
-      setCssProps(label, { 'grid-row': String(hour + 2), 'grid-column': '1' });
+      setInlineStyles(label, { 'grid-row': String(hour + 2), 'grid-column': '1' });
     }
     for (let day = 0; day < 7; day++) {
       const date = shiftDate(range.from, day);
       const column = grid.createDiv({ cls: 'life-os-week-day' });
       column.dataset.date = date;
-      setCssProps(column, { 'grid-column': String(day + 2), 'grid-row': '1 / span 25' });
+      setInlineStyles(column, { 'grid-column': String(day + 2), 'grid-row': '1 / span 25' });
       const head = column.createDiv({ cls: 'life-os-week-day-head' });
       head.createDiv({ text: formatDay(date) }); head.createDiv({ text: date.slice(5), cls: 'life-os-help' });
-      for (let h = 0; h < 24; h++) { const slot = column.createDiv({ cls: 'life-os-week-slot' }); setCssProps(slot, { top: `${38 + h * 42}px` }); }
+      for (let h = 0; h < 24; h++) { const slot = column.createDiv({ cls: 'life-os-week-slot' }); setInlineStyles(slot, { top: `${38 + h * 42}px` }); }
       column.addEventListener('dragover', (event) => { if (this.plugin.settings.planningPreferences.enableDragUnscheduled) event.preventDefault(); });
       column.addEventListener('drop', (event) => { event.preventDefault(); void this.dropUnscheduledOnPlanner(event, column, date); });
       const generated = generatedEntries(this.plugin.settings, date);
@@ -656,7 +662,7 @@ class LifeOSView extends ItemView {
       }
       for (const item of entries) this.createPlannerBlock(column, date, item);
       const planButton = column.createEl('button', { text: '+', cls: 'life-os-day-add' });
-      setCssProps(planButton, { top: '6px' }); planButton.onclick = () => { void this.addTimelineItem(date).catch((error: unknown) => console.error('Life OS plan-time action failed', error)); };
+      setInlineStyles(planButton, { top: '6px' }); planButton.onclick = () => { void this.addTimelineItem(date).catch((error: unknown) => console.error('Life OS plan-time action failed', error)); };
     }
   }
 
@@ -746,8 +752,8 @@ class LifeOSView extends ItemView {
     if (item.id.startsWith('rule:')) block.dataset.rule = 'true';
     const start = timeToMinutes(item.start);
     const duration = diffMinutes(item.start, item.end);
-    setCssProps(block, { top: `${38 + (start / 60) * 42}px` });
-    setCssProps(block, { height: `${Math.max(24, (duration / 60) * 42 - 2)}px` });
+    setInlineStyles(block, { top: `${38 + (start / 60) * 42}px` });
+    setInlineStyles(block, { height: `${Math.max(24, (duration / 60) * 42 - 2)}px` });
     block.createDiv({ text: item.title, cls: 'life-os-planner-block-title' });
     block.createDiv({ text: `${item.start}–${item.end} · ${item.type}`, cls: 'life-os-planner-block-meta' });
     const resize = block.createDiv({ cls: 'life-os-planner-resize' });
@@ -793,8 +799,8 @@ class LifeOSView extends ItemView {
         if (conflicts.length) {
           const conflict = conflicts[0];
           if (conflict) new Notice(`Planner conflict: ${conflict.message}`);
-          setCssProps(block, { top: `${38 + (originalStart / 60) * 42}px` });
-          setCssProps(block, { height: `${Math.max(24, (originalDuration / 60) * 42 - 2)}px` });
+          setInlineStyles(block, { top: `${38 + (originalStart / 60) * 42}px` });
+          setInlineStyles(block, { height: `${Math.max(24, (originalDuration / 60) * 42 - 2)}px` });
           return;
         }
         if (ruleGenerated) {
@@ -824,10 +830,10 @@ class LifeOSView extends ItemView {
       const delta = event.clientY - pointerStartY;
       if (mode === 'drag') {
         const provisional = snapMinutes(originalStart + (delta / 42) * 60, this.plugin.settings.planningPreferences.slotMinutes);
-        setCssProps(block, { top: `${38 + (provisional / 60) * 42}px` });
+        setInlineStyles(block, { top: `${38 + (provisional / 60) * 42}px` });
       } else {
         const provisional = snapMinutes(originalDuration + (delta / 42) * 60, this.plugin.settings.planningPreferences.slotMinutes);
-        setCssProps(block, { height: `${Math.max(24, (Math.max(15, provisional) / 60) * 42 - 2)}px` });
+        setInlineStyles(block, { height: `${Math.max(24, (Math.max(15, provisional) / 60) * 42 - 2)}px` });
       }
     };
     const begin = (event: PointerEvent, nextMode: 'drag' | 'resize'): void => {
@@ -923,7 +929,7 @@ class LifeOSView extends ItemView {
       priority.onchange = async () => { goal.priority = priority.value as typeof goal.priority; await this.plugin.saveData(this.plugin.settings); await this.render(); };
       const meta = card.createDiv({ text: `${goalSummary(goal)} · ${metricLabel(goal.metric)}`, cls: 'life-os-help' });
       const bar = card.createDiv({ cls: 'life-os-goal-bar' });
-      setCssProps(bar.createDiv({ cls: 'life-os-goal-fill' }), { width: `${goalProgressPct(goal)}%` });
+      setInlineStyles(bar.createDiv({ cls: 'life-os-goal-fill' }), { width: `${goalProgressPct(goal)}%` });
       const row = card.createDiv({ cls: 'life-os-goal-actions' });
       const metric = row.createEl('select');
       Object.entries({ manual: 'Manual', 'task-completion': 'Task completion', 'habit-consistency': 'Habit consistency', 'study-minutes': 'Study minutes', 'exercise-minutes': 'Exercise minutes', 'prayer-completion': 'Prayer completion' }).forEach(([value, label]) => metric.add(new Option(label, value)));
@@ -999,7 +1005,7 @@ class LifeOSView extends ItemView {
     points.forEach((point) => {
       const item = plot.createDiv({ cls: 'life-os-chart-point' });
       const bar = item.createDiv({ cls: 'life-os-chart-bar' });
-      setCssProps(bar, { height: `${Math.max(3, (point.value / max) * 100)}%` });
+      setInlineStyles(bar, { height: `${Math.max(3, (point.value / max) * 100)}%` });
       bar.title = `${point.label}: ${niceLabel(point.value)}${suffix}`;
       item.createDiv({ text: point.label, cls: 'life-os-chart-label' });
     });
@@ -1123,7 +1129,7 @@ class LifeOSSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Prayer minute adjustment').setDesc('Add/subtract minutes from calculated times.').addText((text) => text.setValue(String(this.plugin.settings.prayerCalculation.minuteAdjustment)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.minuteAdjustment = Number(value) || 0; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Prayer & integration features').setHeading();
     new Setting(containerEl).setName('Default prayer times').setDesc('Copied into newly-created daily records when automatic calculation is disabled.');
-    Object.keys(this.plugin.settings.defaultPrayerTimes).forEach((name) => new Setting(containerEl).setName(name).addText((text) => text.setValue(this.plugin.settings.defaultPrayerTimes[name]).onChange(async (value: string) => { this.plugin.settings.defaultPrayerTimes[name] = value; await this.plugin.saveData(this.plugin.settings); })));
+    Object.entries(this.plugin.settings.defaultPrayerTimes).forEach(([name, currentValue]) => new Setting(containerEl).setName(name).addText((text) => text.setValue(currentValue).onChange(async (value: string) => { this.plugin.settings.defaultPrayerTimes[name as keyof typeof this.plugin.settings.defaultPrayerTimes] = value; await this.plugin.saveData(this.plugin.settings); })));
     new Setting(containerEl).setName('Study subjects').setDesc('Comma-separated preset subjects.').addText((text) => text.setValue(this.plugin.settings.defaultStudySubjects.join(', ')).onChange(async (value: string) => { this.plugin.settings.defaultStudySubjects = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Habits').setDesc('Enable or disable starter habits.').setHeading();
     this.plugin.settings.habits.forEach((habit) => new Setting(containerEl).setName(`${habit.icon} ${habit.name} · ${habit.type}`).addToggle((toggle) => toggle.setValue(habit.enabled).onChange(async (value: boolean) => { habit.enabled = value; await this.plugin.saveData(this.plugin.settings); })));
@@ -1178,7 +1184,7 @@ async function copyText(value: string, successMessage: string): Promise<void> {
     }
     const textarea = document.createElement('textarea');
     textarea.value = value;
-    setCssProps(textarea, { position: 'fixed', opacity: '0' });
+    setInlineStyles(textarea, { position: 'fixed', opacity: '0' });
     document.body.appendChild(textarea);
     textarea.select();
     const copied = document.execCommand('copy');

@@ -167,5 +167,5 @@ export async function saveReport(app: App, settings: LifeOSSettings, report: Rep
 function csv(value: string): string { return `"${value.replace(/"/g, '""')}"`; }
 function escapePipe(value: string): string { return value.replace(/\|/g, '/'); }
 function round(value: number): string { return Number(value.toFixed(1)).toString(); }
-function labelPeriod(period: ReportPeriod): string { return period[0].toUpperCase() + period.slice(1); }
+function labelPeriod(period: ReportPeriod): string { return period.charAt(0).toUpperCase() + period.slice(1); }
 function diffMinutes(start: string, end: string): number { const [sh = 0, sm = 0] = start.split(':').map(Number); const [eh = 0, em = 0] = end.split(':').map(Number); let d = eh * 60 + em - (sh * 60 + sm); if (d < 0) d += 1440; return d; }
