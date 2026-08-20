@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-misused-promises */
 import { Setting } from 'obsidian';
 import type { LifeOSPlugin } from './main';
 import { HabitDefinition, PlanningRule, RecurrenceType, TrackerType } from './types';
@@ -14,11 +15,11 @@ function saveAndRefresh(plugin: LifeOSPlugin, onChanged: () => Promise<void>, mu
 
 export function renderHabitBuilder(parent: HTMLElement, plugin: LifeOSPlugin, onChanged: () => Promise<void>): void {
   const intro = parent.createDiv({ cls: 'life-os-section' });
-  intro.createEl('h2', { text: '🌱 Habit Builder' });
+  intro.createEl('h2', { text: '🌱 Habit builder' });
   intro.createDiv({ text: 'Build habits with the tracking method, target, recurrence, time block, and optionality that actually fit them.', cls: 'life-os-help' });
 
   const actions = intro.createDiv({ cls: 'life-os-actions' });
-  const add = actions.createEl('button', { text: '＋ New habit' });
+  const add = actions.createEl('button', { text: '＋ new habit' });
   add.addClass('mod-cta');
   add.onclick = () => {
     const id = `habit-${Date.now()}`;
@@ -36,7 +37,7 @@ function renderPlanningRules(parent: HTMLElement, plugin: LifeOSPlugin, onChange
   const section = parent.createDiv({ cls: 'life-os-section life-os-planning-rules' });
   section.createEl('h2', { text: '🗓 Recurring plans' });
   section.createDiv({ text: 'Use the same recurrence engine for recurring study, task, exercise, rest, or other time blocks.', cls: 'life-os-help' });
-  const add = section.createEl('button', { text: '＋ New recurring plan' });
+  const add = section.createEl('button', { text: '＋ new recurring plan' });
   add.onclick = () => {
     plugin.settings.planningRules.push({ id: `rule-${Date.now()}`, name: 'New plan', kind: 'task', recurrence: 'weekly', daysOfWeek: [1,2,3,4,5], startTime: '09:00', endTime: '10:00', optional: false, enabled: true });
     void plugin.saveData(plugin.settings).then(() => onChanged()).catch((error: unknown) => { console.error('Life OS planning rule save failed', error); });

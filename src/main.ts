@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-misused-promises */
 import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf } from 'obsidian';
 import { calculateStats, collectRecords, lastNDays, calculateYearlyStats, monthlyTrendPoints } from './analytics';
 import { DEFAULT_HABITS, EXERCISE_PRESETS, FOOD_PRESETS } from './presets';
@@ -33,7 +34,7 @@ export class LifeOSPlugin extends Plugin {
 
   async onload(): Promise<void> {
     const rawData: unknown = await this.loadData();
-    const migration = migrateSettings(isRecord(rawData) ? rawData as Partial<LifeOSSettings> : null);
+    const migration = migrateSettings(isRecord(rawData) ? rawData : null);
     this.settings = migration.settings;
     if (migration.audit.changed) await this.saveData(this.settings);
     const dailyRoot = this.settings.dailyNotesFolder.replace(/\/+$/, '') + '/';
@@ -744,9 +745,7 @@ class LifeOSView extends ItemView {
       document.body.classList.remove('life-os-planner-dragging');
       const sourceDate = date;
       const targetNode = document.elementFromPoint(event.clientX, event.clientY);
-      const targetEl = targetNode instanceof HTMLElement
-        ? targetNode.closest<HTMLElement>('.life-os-week-day')
-        : null;
+      const targetEl = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') : null;
       const targetDate = targetEl?.dataset.date ?? sourceDate;
       const sourceRecord = (await loadRecord(this.app, sourceDate, this.plugin.settings)) ?? makeEmptyRecord(sourceDate, this.plugin.settings);
       const ruleGenerated = item.id.startsWith('rule:');
