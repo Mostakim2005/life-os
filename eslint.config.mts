@@ -13,7 +13,6 @@ export default defineConfig(
 		'package.json',
 		'package-lock.json',
 		'tsconfig.json',
-		'tests',
 	]),
 	{
 		languageOptions: {
@@ -31,13 +30,3 @@ export default defineConfig(
 	},
 	...obsidianmd.configs.recommended,
 );
-
-// Life OS uses asynchronous side effects from Obsidian UI callbacks; these callbacks are
-// deliberately fire-and-forget and are wrapped with explicit `void`/error handling.
-// The template's no-misused-promises rule cannot express that API pattern precisely.
-{
-	files: ['src/main.ts', 'src/habit-builder.ts', 'src/editor-modals.ts'],
-	rules: {
-		'@typescript-eslint/no-misused-promises': 'off',
-	},
-},
