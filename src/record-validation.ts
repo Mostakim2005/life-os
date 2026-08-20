@@ -1,6 +1,6 @@
 import { DailyRecord, ExerciseEntry, HabitEntry, MealEntry, PrayerEntry, StudyPlanItem, StudySession, TimelineEntry } from './types';
 
-export function isIsoDate(value: unknown): value is string {
+export function isIsoDate(value: unknown): boolean {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
@@ -123,12 +123,12 @@ export function sanitizeDailyRecord(input: Partial<DailyRecord>, date: string, n
   if (input.habits && typeof input.habits === 'object') {
     for (const [id, raw] of Object.entries(input.habits).slice(0, 500)) {
       if (!raw || typeof raw !== 'object') continue;
-      const value = (raw as HabitEntry).value;
+      const value = raw.value;
       if (typeof value === 'boolean' || typeof value === 'number' || Array.isArray(value)) {
         const normalizedValue: HabitEntry['value'] = Array.isArray(value)
           ? value.slice(0, 50).map((v) => Math.max(0, finiteNumber(v)))
           : value;
-        const rawNote = (raw as HabitEntry).note;
+        const rawNote = raw.note;
         habits[id.slice(0, 100)] = { value: normalizedValue, note: typeof rawNote === 'string' ? rawNote.slice(0, 500) : undefined };
       }
     }

@@ -176,9 +176,7 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
   if (jsonMatch) {
     try {
-      const jsonBody = jsonMatch[1];
-      if (jsonBody === undefined) throw new Error('Missing JSON body');
-      const parsed = JSON.parse(jsonBody) as Partial<DailyRecord>;
+      const parsed = JSON.parse(jsonMatch[1]) as Partial<DailyRecord>;
       const empty = makeEmptyRecord(date, settings);
       return sanitizeDailyRecord(parsed, date, path, empty);
     } catch {
@@ -190,12 +188,11 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   record.schemaVersion = CURRENT_SCHEMA_VERSION;
   const yaml = text.match(/^---\n([\s\S]*?)\n---/);
   if (yaml) {
-    const yamlBody = yaml[1];
-    if (yamlBody !== undefined) for (const line of yamlBody.split('\n')) {
-      const parts = line.split(':');
-      const key = parts[0];
-      if (!key) continue;
-      const value = parts.slice(1).join(':').trim().replace(/^"|"$/g, '');
+    for (const line of yaml[1].split('\n')) {
+      const separator = line.indexOf(':');
+      if (separator < 0) continue;
+      const key = line.slice(0, separator).trim();
+      const value = line.slice(separator + 1).trim().replace(/^"|"$/g, '');
       if (key === 'mood') record.mood = Number(value) || 3;
       if (key === 'energy') record.energy = Number(value) || 3;
       if (key === 'sleepHours') record.sleepHours = Number(value) || 0;
@@ -213,10 +210,10 @@ export function settingsWithDefaults(raw: Partial<LifeOSSettings> | null | undef
     ...source,
     schemaVersion: CURRENT_SCHEMA_VERSION,
     defaultPrayerTimes: { ...DEFAULT_SETTINGS.defaultPrayerTimes, ...(source.defaultPrayerTimes ?? {}) },
-    habits: source.habits?.length ? source.habits as HabitDefinition[] : DEFAULT_HABITS,
+    habits: source.habits?.length ? source.habits : DEFAULT_HABITS,
     enabledFoodPresetCategories: source.enabledFoodPresetCategories ?? DEFAULT_SETTINGS.enabledFoodPresetCategories,
     defaultStudySubjects: source.defaultStudySubjects?.length ? source.defaultStudySubjects : DEFAULT_SETTINGS.defaultStudySubjects,
-    goals: Array.isArray(source.goals) ? source.goals as Goal[] : [],
+    goals: Array.isArray(source.goals) ? source.goals : [],
     planningRules: Array.isArray(source.planningRules) ? source.planningRules : [],
     planningOverrides: source.planningOverrides ?? {},
     reportFolder: typeof source.reportFolder === 'string' ? source.reportFolder : DEFAULT_SETTINGS.reportFolder,
