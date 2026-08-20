@@ -70,8 +70,10 @@ export class LifeOSPlugin extends Plugin {
   async activateView(tab: LifeOSTab = 'daily'): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE);
     if (existing.length) {
-      this.app.workspace.revealLeaf(existing[0]);
-      const view = existing[0].view as LifeOSView;
+      const leaf = existing[0];
+      if (!leaf) return;
+      this.app.workspace.revealLeaf(leaf);
+      const view = leaf.view as LifeOSView;
       view.activeTab = tab;
       await view.render();
       return;
@@ -476,7 +478,8 @@ class LifeOSView extends ItemView {
     const record = date === this.selectedDate ? this.record : ((await loadRecord(this.app, date, this.plugin.settings)) ?? makeEmptyRecord(date, this.plugin.settings));
     const candidate = { id: 'candidate', title, start, end, type: safeType as TimelineEntry['type'], planned: true, actual: false };
     const conflicts = getConflicts([...record.timeline, candidate]).filter((conflict) => conflict.incoming.id === 'candidate' || conflict.existing.id === 'candidate');
-    if (conflicts.length && !window.confirm(`${conflicts[0].message}\n\nAdd it anyway?`)) return;
+    const firstConflict = conflicts[0];
+    if (firstConflict && !window.confirm(`${firstConflict.message}\n\nAdd it anyway?`)) return;
     record.timeline.push({ ...candidate, id: crypto.randomUUID() });
     await saveRecord(this.app, record, this.plugin.settings);
     if (date !== this.selectedDate) new Notice(`Planned ${title} on ${date}`);
@@ -503,7 +506,10 @@ class LifeOSView extends ItemView {
   private renderCalendarGrid(section: HTMLElement, month: string): void {
     section.querySelector('.life-os-calendar-grid')?.remove();
     const grid = section.createDiv({ cls: 'life-os-calendar-grid' });
-    const [year, mon] = month.split('-').map(Number);
+    const parts = month.split('-').map(Number);
+    const year = parts[0];
+    const mon = parts[1];
+    if (year === undefined || mon === undefined || !Number.isFinite(year) || !Number.isFinite(mon)) return;
     const first = new Date(year, mon - 1, 1).getDay();
     const days = new Date(year, mon, 0).getDate();
     ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((day) => grid.createDiv({ text: day, cls: 'life-os-calendar-head' }));
@@ -556,8 +562,11 @@ class LifeOSView extends ItemView {
       summary.createDiv({ text: `${Math.round(totalFree / 60)}h ${totalFree % 60}m free across the week` });
       if (this.plugin.settings.planningPreferences.enableAdaptiveRescheduling) {
         const best = weekRecords[range.from];
-        const free = freeWindows(allEntriesForDate(this.plugin.settings, best, range.from), 30);
-        if (free.length) summary.createDiv({ text: `Next open window: ${free[0].start}–${free[0].end} on ${formatDay(range.from)}` });
+        if (best) {
+          const free = freeWindows(allEntriesForDate(this.plugin.settings, best, range.from), 30);
+          const firstFree = free[0];
+          if (firstFree) summary.createDiv({ text: `Next open window: ${firstFree.start}–${firstFree.end} on ${formatDay(range.from)}` });
+        }
       }
     }
 
@@ -644,6 +653,7 @@ class LifeOSView extends ItemView {
     for (let i = 0; i < 7; i++) {
       const date = shiftDate(weekStart, i);
       const record = this.currentWeekRecords[date];
+      if (!record) continue;
       for (const item of getUnscheduledItems(record)) {
         count++;
         const card = grid.createDiv({ cls: 'life-os-unscheduled-card' });
@@ -763,7 +773,9 @@ class LifeOSView extends ItemView {
         const candidateEntries = [...conflictRecord.timeline.filter((entry) => entry.id !== item.id), ...generatedEntries(this.plugin.settings, targetDate), sourceItem];
         const conflicts = getConflicts(candidateEntries).filter((conflict) => conflict.incoming.id === sourceItem.id || conflict.existing.id === sourceItem.id);
         if (conflicts.length) {
-          new Notice(`Planner conflict: ${conflicts[0].message}`);
+          const firstConflict = conflicts[0];
+          if (!firstConflict) return;
+          new Notice(`Planner conflict: ${firstConflict.message}`);
           block.style.top = `${38 + (originalStart / 60) * 42}px`;
           block.style.height = `${Math.max(24, (originalDuration / 60) * 42 - 2)}px`;
           return;
@@ -835,7 +847,7 @@ class LifeOSView extends ItemView {
     header.createDiv({ text: 'Printable daily, weekly and monthly reports with food, exercise, study, prayer, tasks, habits, sleep, goals and time-allocation statistics.', cls: 'life-os-help' });
     const controls = header.createDiv({ cls: 'life-os-actions' });
     const period = controls.createEl('select');
-    (['day', 'week', 'month'] as ReportPeriod[]).forEach((p) => period.add(new Option(p[0].toUpperCase() + p.slice(1), p)));
+    (['day', 'week', 'month'] as ReportPeriod[]).forEach((p) => period.add(new Option(p.charAt(0).toUpperCase() + p.slice(1), p)));
     const format = controls.createEl('select');
     (['md', 'json', 'csv'] as ReportFormat[]).forEach((f) => format.add(new Option(f.toUpperCase(), f)));
     const exportButton = controls.createEl('button', { text: 'Export report' });
@@ -1172,7 +1184,7 @@ function minutesToTime(value: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-function timeToMinutes(value: string): number { const [hours, minutes] = value.split(':').map(Number); return hours * 60 + minutes; }
+function timeToMinutes(value: string): number { const parts = value.split(':').map(Number); const hours = parts[0] ?? 0; const minutes = parts[1] ?? 0; return hours * 60 + minutes; }
 function diffMinutes(start: string, end: string): number { let diff = timeToMinutes(end) - timeToMinutes(start); if (diff < 0) diff += 1440; return diff; }
 function shiftDate(date: string, deltaDays: number): string { const d = new Date(`${date}T12:00:00`); d.setDate(d.getDate() + deltaDays); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function formatDay(date: string): string { return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); }

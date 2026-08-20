@@ -176,7 +176,9 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[1]) as Partial<DailyRecord>;
+      const json = jsonMatch[1];
+      if (json === undefined) throw new Error('Missing Life OS JSON payload');
+      const parsed = JSON.parse(json) as Partial<DailyRecord>;
       const empty = makeEmptyRecord(date, settings);
       return sanitizeDailyRecord(parsed, date, path, empty);
     } catch {
@@ -188,7 +190,8 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
   record.schemaVersion = CURRENT_SCHEMA_VERSION;
   const yaml = text.match(/^---\n([\s\S]*?)\n---/);
   if (yaml) {
-    for (const line of yaml[1].split('\n')) {
+    const yamlText = yaml[1];
+    if (yamlText !== undefined) for (const line of yamlText.split('\n')) {
       const separator = line.indexOf(':');
       if (separator < 0) continue;
       const key = line.slice(0, separator).trim();
