@@ -1,4 +1,4 @@
-import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf } from 'obsidian';
 import { calculateStats, collectRecords, lastNDays, calculateYearlyStats, monthlyTrendPoints } from './analytics';
 import { DEFAULT_HABITS, EXERCISE_PRESETS, FOOD_PRESETS } from './presets';
 import { DailyRecord, HabitDefinition, HabitEntry, LifeOSSettings, PrayerStatus, StudySessionType, TimelineEntry } from './types';
@@ -37,9 +37,20 @@ export class LifeOSPlugin extends Plugin {
     this.settings = migration.settings;
     if (migration.audit.changed) await this.saveData(this.settings);
     const dailyRoot = this.settings.dailyNotesFolder.replace(/\/+$/, '') + '/';
-    this.registerEvent(this.app.vault.on('modify' as any, (file: TFile) => { if (file.path.startsWith(dailyRoot)) invalidateLifeOSCache(file.path); }));
-    this.registerEvent(this.app.vault.on('create' as any, (file: TFile) => { if (file.path.startsWith(dailyRoot)) { invalidateDateIndex(this.settings); invalidateLifeOSCache(file.path); } }));
-    this.registerEvent(this.app.vault.on('delete' as any, (file: TFile) => { if (file.path.startsWith(dailyRoot)) { invalidateDateIndex(this.settings); invalidateLifeOSCache(file.path); } }));
+    this.registerEvent(this.app.vault.on('modify', (file: TAbstractFile) => {
+      if (!(file instanceof TFile) || !file.path.startsWith(dailyRoot)) return;
+      invalidateLifeOSCache(file.path);
+    }));
+    this.registerEvent(this.app.vault.on('create', (file: TAbstractFile) => {
+      if (!(file instanceof TFile) || !file.path.startsWith(dailyRoot)) return;
+      invalidateDateIndex(this.settings);
+      invalidateLifeOSCache(file.path);
+    }));
+    this.registerEvent(this.app.vault.on('delete', (file: TAbstractFile) => {
+      if (!(file instanceof TFile) || !file.path.startsWith(dailyRoot)) return;
+      invalidateDateIndex(this.settings);
+      invalidateLifeOSCache(file.path);
+    }));
     this.registerView(VIEW_TYPE, (leaf: WorkspaceLeaf) => new LifeOSView(leaf, this));
     this.addRibbonIcon('heart-pulse', 'Open Life OS', () => void this.activateView());
     this.addCommand({ id: 'open-dashboard', name: 'Open Life OS dashboard', callback: () => void this.activateView() });
