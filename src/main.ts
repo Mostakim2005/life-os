@@ -1,4 +1,4 @@
-import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import { calculateStats, collectRecords, lastNDays, calculateYearlyStats, monthlyTrendPoints } from './analytics';
 import { DEFAULT_HABITS, EXERCISE_PRESETS, FOOD_PRESETS } from './presets';
 import { DailyRecord, HabitDefinition, HabitEntry, LifeOSSettings, PrayerStatus, StudySessionType, TimelineEntry } from './types';
@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS, ensureFolder, loadRecord, makeEmptyRecord, saveRecord
 import { niceLabel } from './charting';
 import { renderHabitBuilder } from './habit-builder';
 import { generatedEntries, getConflicts, overrideKey } from './planning';
-import { adaptiveSuggestions, allEntriesForDate, freeWindows, getUnscheduledItems, suggestSlots, UnscheduledItem, goalAwareAdaptiveSuggestions } from './scheduling';
+import { adaptiveSuggestions, allEntriesForDate, freeWindows, getUnscheduledItems, suggestSlots, goalAwareAdaptiveSuggestions } from './scheduling';
 import { createGoal, deleteGoal, goalProgressPct, goalSummary, metricLabel, priorityWeight, refreshAutoGoals } from './goals';
 import { calculatePrayerTimes } from './prayer-times';
 import { buildReport, saveReport, ReportFormat, ReportPeriod } from './reporting';
@@ -23,6 +23,10 @@ import { editExercise, editMeal } from './editor-modals';
 const VIEW_TYPE = 'life-os-dashboard';
 type LifeOSTab = 'daily' | 'planner' | 'reviews' | 'stats' | 'habits' | 'goals' | 'reports';
 
+function isSettingsObject(value: unknown): value is Partial<LifeOSSettings> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function todayISO(): string {
   const d = new Date();
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
@@ -33,33 +37,24 @@ export class LifeOSPlugin extends Plugin {
   settings: LifeOSSettings = DEFAULT_SETTINGS;
 
   async onload(): Promise<void> {
-    const migration = migrateSettings(await this.loadData());
+    const stored = await this.loadData();
+    const rawSettings: Partial<LifeOSSettings> | null = isSettingsObject(stored) ? stored : null;
+    const migration = migrateSettings(rawSettings);
     this.settings = migration.settings;
     if (migration.audit.changed) await this.saveData(this.settings);
     const dailyRoot = this.settings.dailyNotesFolder.replace(/\/+$/, '') + '/';
-    this.registerEvent(this.app.vault.on('modify', (file: TAbstractFile) => {
-      if (!(file instanceof TFile) || !file.path.startsWith(dailyRoot)) return;
-      invalidateLifeOSCache(file.path);
-    }));
-    this.registerEvent(this.app.vault.on('create', (file: TAbstractFile) => {
-      if (!(file instanceof TFile) || !file.path.startsWith(dailyRoot)) return;
-      invalidateDateIndex(this.settings);
-      invalidateLifeOSCache(file.path);
-    }));
-    this.registerEvent(this.app.vault.on('delete', (file: TAbstractFile) => {
-      if (!(file instanceof TFile) || !file.path.startsWith(dailyRoot)) return;
-      invalidateDateIndex(this.settings);
-      invalidateLifeOSCache(file.path);
-    }));
+    this.registerEvent(this.app.vault.on('modify', (file) => { if (file instanceof TFile && file.path.startsWith(dailyRoot)) invalidateLifeOSCache(file.path); }));
+    this.registerEvent(this.app.vault.on('create', (file) => { if (file instanceof TFile && file.path.startsWith(dailyRoot)) { invalidateDateIndex(this.settings); invalidateLifeOSCache(file.path); } }));
+    this.registerEvent(this.app.vault.on('delete', (file) => { if (file instanceof TFile && file.path.startsWith(dailyRoot)) { invalidateDateIndex(this.settings); invalidateLifeOSCache(file.path); } }));
     this.registerView(VIEW_TYPE, (leaf: WorkspaceLeaf) => new LifeOSView(leaf, this));
     this.addRibbonIcon('heart-pulse', 'Open Life OS', () => void this.activateView());
-    this.addCommand({ id: 'open-dashboard', name: 'Open Life OS dashboard', callback: () => void this.activateView() });
+    this.addCommand({ id: 'open-dashboard', name: 'Open dashboard', callback: () => void this.activateView() });
     this.addCommand({ id: 'create-daily-note', name: "Create/open today's life note", callback: () => void this.openDaily(todayISO()) });
-    this.addCommand({ id: 'open-planner', name: 'Open Life OS visual planner', callback: () => void this.activateView('planner') });
-    this.addCommand({ id: 'open-weekly-review', name: 'Open Life OS weekly review', callback: () => void this.activateView('reviews') });
-    this.addCommand({ id: 'open-statistics', name: 'Open Life OS statistics', callback: () => void this.activateView('stats') });
-    this.addCommand({ id: 'open-habit-builder', name: 'Open Life OS habit builder', callback: () => void this.activateView('habits') });
-    this.addCommand({ id: 'open-goals', name: 'Open Life OS goals', callback: () => void this.activateView('goals') });
+    this.addCommand({ id: 'open-planner', name: 'Open visual planner', callback: () => void this.activateView('planner') });
+    this.addCommand({ id: 'open-weekly-review', name: 'Open weekly review', callback: () => void this.activateView('reviews') });
+    this.addCommand({ id: 'open-statistics', name: 'Open statistics', callback: () => void this.activateView('stats') });
+    this.addCommand({ id: 'open-habit-builder', name: 'Open habit builder', callback: () => void this.activateView('habits') });
+    this.addCommand({ id: 'open-goals', name: 'Open goals', callback: () => void this.activateView('goals') });
     this.addCommand({ id: 'export-today-json', name: 'Export today as JSON', callback: () => void this.exportDate(todayISO(), 'json') });
     this.addCommand({ id: 'export-today-markdown', name: 'Export today as Markdown', callback: () => void this.exportDate(todayISO(), 'md') });
     (['day', 'week', 'month'] as ReportPeriod[]).forEach((period) => {
@@ -68,33 +63,34 @@ export class LifeOSPlugin extends Plugin {
       });
     });
     this.addCommand({ id: 'calculate-prayer-times', name: 'Calculate today prayer times', callback: () => void this.applyPrayerTimes(todayISO(), true) });
-    this.addCommand({ id: 'import-markdown-tasks', name: 'Import Markdown/Tasks into Life OS', callback: () => void this.importTasksIntoDay(todayISO()) });
-    this.addCommand({ id: 'create-templater-template', name: 'Create Life OS Templater template', callback: () => void this.createTemplaterTemplate() });
-    this.addCommand({ id: 'migrate-life-os-data', name: 'Migrate/import Life OS legacy data', callback: () => void this.migrateData() });
-    this.addCommand({ id: 'life-os-copy-dataview-query', name: 'Copy Dataview Life OS query', callback: () => this.settings.integrations.dataview ? copyText(lifeOSDataviewQuery(), 'Dataview query copied') : Promise.resolve(new Notice('Dataview integration is disabled in settings.')) });
-    this.addCommand({ id: 'life-os-copy-dataview-summary-query', name: 'Copy Dataview Life OS summary query', callback: () => this.settings.integrations.dataview ? copyText(lifeOSDataviewSummaryQuery(), 'Dataview summary query copied') : Promise.resolve(new Notice('Dataview integration is disabled in settings.')) });
-    this.addCommand({ id: 'life-os-copy-templater-template', name: 'Copy Life OS Templater template', callback: () => this.settings.integrations.templater ? copyText(lifeOSTemplaterTemplate(), 'Templater template copied') : Promise.resolve(new Notice('Templater integration is disabled in settings.')) });
-    this.addCommand({ id: 'life-os-copy-task-metadata-guide', name: 'Copy Life OS task metadata guide', callback: () => copyText(tasksMetadataGuide(), 'Task metadata guide copied') });
+    this.addCommand({ id: 'import-markdown-tasks', name: 'Import Markdown/Tasks', callback: () => void this.importTasksIntoDay(todayISO()) });
+    this.addCommand({ id: 'create-templater-template', name: 'Create Templater template', callback: () => void this.createTemplaterTemplate() });
+    this.addCommand({ id: 'migrate-data', name: 'Migrate/import legacy data', callback: () => void this.migrateData() });
+    this.addCommand({ id: 'copy-dataview-query', name: 'Copy Dataview query', callback: () => { if (!this.settings.integrations.dataview) { new Notice('Dataview integration is disabled in settings.'); return; } void copyText(lifeOSDataviewQuery(), 'Dataview query copied'); } });
+    this.addCommand({ id: 'copy-dataview-summary-query', name: 'Copy Dataview summary query', callback: () => { if (!this.settings.integrations.dataview) { new Notice('Dataview integration is disabled in settings.'); return; } void copyText(lifeOSDataviewSummaryQuery(), 'Dataview summary query copied'); } });
+    this.addCommand({ id: 'copy-templater-template', name: 'Copy Templater template', callback: () => { if (!this.settings.integrations.templater) { new Notice('Templater integration is disabled in settings.'); return; } void copyText(lifeOSTemplaterTemplate(), 'Templater template copied'); } });
+    this.addCommand({ id: 'copy-task-metadata-guide', name: 'Copy task metadata guide', callback: () => { void copyText(tasksMetadataGuide(), 'Task metadata guide copied'); } });
     this.addSettingTab(new LifeOSSettingTab(this.app, this));
   }
 
   async activateView(tab: LifeOSTab = 'daily'): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE);
-    if (existing.length) {
-      const leaf = existing[0];
-      if (!leaf) return;
-      this.app.workspace.revealLeaf(leaf);
-      const view = leaf.view as LifeOSView;
-      view.activeTab = tab;
-      await view.render();
+    const existingLeaf = existing[0];
+    if (existingLeaf) {
+      const view = existingLeaf.view;
+      if (view instanceof LifeOSView) {
+        view.activeTab = tab;
+        await view.render();
+      }
       return;
     }
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.setViewState({ type: VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
-    const view = leaf.view as LifeOSView;
-    view.activeTab = tab;
-    await view.render();
+    const view = leaf.view;
+    if (view instanceof LifeOSView) {
+      view.activeTab = tab;
+      await view.render();
+    }
   }
 
   async openDaily(date: string): Promise<void> {
@@ -224,7 +220,7 @@ class LifeOSView extends ItemView {
     if (this.activeTab === 'reports') { await this.renderReports(root); return; }
 
     const controls = header.createDiv({ cls: 'life-os-header-controls' });
-    const date = controls.createEl('input', { type: 'date' }) as HTMLInputElement;
+    const date = controls.createEl('input', { type: 'date' });
     date.value = this.selectedDate;
     date.onchange = async () => { this.selectedDate = date.value; await this.render(); };
     const today = controls.createEl('button', { text: 'Today' });
@@ -278,10 +274,10 @@ class LifeOSView extends ItemView {
     this.record.prayers.forEach((prayer) => {
       const row = section.createDiv({ cls: 'life-os-row' });
       row.createDiv({ text: prayer.name, cls: 'life-os-row-title' });
-      const time = row.createEl('input', { type: 'time' }) as HTMLInputElement;
+      const time = row.createEl('input', { type: 'time' });
       time.value = prayer.time;
       time.onchange = async () => { prayer.time = time.value; await this.persist(false); };
-      const select = row.createEl('select') as HTMLSelectElement;
+      const select = row.createEl('select');
       (['not-tracked', 'completed', 'late', 'missed'] as PrayerStatus[]).forEach((status) => select.add(new Option(status.replace('-', ' '), status)));
       select.value = prayer.status;
       select.onchange = async () => {
@@ -306,7 +302,7 @@ class LifeOSView extends ItemView {
     this.plugin.settings.defaultStudySubjects.forEach((value) => subject.add(new Option(value, value)));
     subject.add(new Option('Custom subject…', '__custom__'));
     const topic = controls.createEl('input'); topic.placeholder = 'Topic / chapter';
-    const minutes = controls.createEl('input', { type: 'number' }) as HTMLInputElement; minutes.min = '1'; minutes.value = '60';
+    const minutes = controls.createEl('input', { type: 'number' }); minutes.min = '1'; minutes.value = '60';
     const type = controls.createEl('select');
     (['study', 'revision', 'practice', 'lecture', 'reading', 'exam', 'assignment', 'other'] as StudySessionType[]).forEach((value) => type.add(new Option(value, value)));
     const add = controls.createEl('button', { text: 'Log study' });
@@ -326,12 +322,12 @@ class LifeOSView extends ItemView {
     const planControls = section.createDiv({ cls: 'life-os-inline-form' });
     const planSubject = planControls.createEl('input'); planSubject.placeholder = 'Plan subject';
     const planTopic = planControls.createEl('input'); planTopic.placeholder = 'Plan topic';
-    const planMinutes = planControls.createEl('input', { type: 'number' }) as HTMLInputElement; planMinutes.value = '60'; planMinutes.min = '1';
-    const planStart = planControls.createEl('input', { type: 'time' }) as HTMLInputElement; planStart.value = '19:00';
-    const planEnd = planControls.createEl('input', { type: 'time' }) as HTMLInputElement; planEnd.value = '20:00';
+    const planMinutes = planControls.createEl('input', { type: 'number' }); planMinutes.value = '60'; planMinutes.min = '1';
+    const planStart = planControls.createEl('input', { type: 'time' }); planStart.value = '19:00';
+    const planEnd = planControls.createEl('input', { type: 'time' }); planEnd.value = '20:00';
     const priority = planControls.createEl('select'); ['low','medium','high','critical'].forEach((v) => priority.add(new Option(v, v))); priority.value = 'medium';
     const goal = planControls.createEl('select'); goal.add(new Option('No goal', '')); this.plugin.settings.goals.filter((g) => g.status === 'active').forEach((g) => goal.add(new Option(g.title, g.id)));
-    const optional = planControls.createEl('label'); const opt = optional.createEl('input', { type: 'checkbox' }) as HTMLInputElement; optional.appendText(' optional');
+    const optional = planControls.createEl('label'); const opt = optional.createEl('input', { type: 'checkbox' }); optional.appendText(' optional');
     const plan = planControls.createEl('button', { text: '＋ Add study plan' });
     plan.onclick = async () => {
       if (!planSubject.value.trim() || !planTopic.value.trim()) { new Notice('Enter subject and topic.'); return; }
@@ -347,7 +343,7 @@ class LifeOSView extends ItemView {
       const row = section.createDiv({ cls: 'life-os-row' });
       row.createDiv({ text: `${session.subject} · ${session.topic}`, cls: 'life-os-row-title' });
       row.createSpan({ text: `${session.durationMin} min · ${session.type}` });
-      const done = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; done.checked = session.completed; done.title = 'Completed';
+      const done = row.createEl('input', { type: 'checkbox' }); done.checked = session.completed; done.title = 'Completed';
       done.onchange = async () => { session.completed = done.checked; await this.persist(false); };
       const del = row.createEl('button', { text: '×' });
       del.onclick = async () => { this.record.studySessions.splice(index, 1); await this.persist(true); await this.render(); };
@@ -359,7 +355,7 @@ class LifeOSView extends ItemView {
         const row = section.createDiv({ cls: 'life-os-row' });
         row.createDiv({ text: `${item.subject} · ${item.topic}`, cls: 'life-os-row-title' });
         row.createSpan({ text: `${item.targetMinutes} min${item.start ? ` · ${item.start}-${item.end}` : ''}${item.optional ? ' · optional' : ''}` });
-        const done = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; done.checked = item.completed;
+        const done = row.createEl('input', { type: 'checkbox' }); done.checked = item.completed;
         done.onchange = async () => { item.completed = done.checked; await this.persist(false); };
         const del = row.createEl('button', { text: '×' });
         del.onclick = async () => { this.record.studyPlan.splice(index, 1); await this.persist(true); await this.render(); };
@@ -375,19 +371,19 @@ class LifeOSView extends ItemView {
       row.createDiv({ text: `${habit.icon} ${habit.name}`, cls: 'life-os-row-title' });
       const current = this.record.habits[habit.id] ?? defaultHabitEntry(habit);
       if (habit.type === 'boolean') {
-        const input = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; input.checked = Boolean(current.value);
+        const input = row.createEl('input', { type: 'checkbox' }); input.checked = Boolean(current.value);
         input.onchange = async () => { current.value = input.checked; this.record.habits[habit.id] = current; await this.persist(false); };
       } else if (habit.type === 'subtasks') {
         const wrap = row.createDiv({ cls: 'life-os-subtasks' });
         const vals = Array.isArray(current.value) ? current.value : [];
         (habit.subtasks ?? []).forEach((name, i) => {
           const label = wrap.createEl('label');
-          const input = label.createEl('input', { type: 'checkbox' }) as HTMLInputElement; input.checked = Number(vals[i]) === 1;
+          const input = label.createEl('input', { type: 'checkbox' }); input.checked = Number(vals[i]) === 1;
           input.onchange = async () => { const next = (Array.isArray(current.value) ? [...current.value] : []).map(Number); while (next.length < (habit.subtasks ?? []).length) next.push(0); next[i] = input.checked ? 1 : 0; current.value = next; this.record.habits[habit.id] = current; await this.persist(false); };
           label.appendText(name);
         });
       } else {
-        const input = row.createEl('input', { type: 'number' }) as HTMLInputElement;
+        const input = row.createEl('input', { type: 'number' });
         input.min = '0'; input.step = '0.1'; input.value = String(typeof current.value === 'number' ? current.value : 0);
         input.onchange = async () => { current.value = Number(input.value) || 0; this.record.habits[habit.id] = current; await this.persist(false); };
         if (habit.target !== undefined) row.createSpan({ text: ` / ${habit.target} ${habit.unit ?? ''}` });
@@ -461,7 +457,7 @@ class LifeOSView extends ItemView {
       row.createDiv({ text: `${item.start}-${item.end}`, cls: 'life-os-time' });
       row.createDiv({ text: item.title, cls: 'life-os-row-title' });
       row.createSpan({ text: `${item.type} · ${item.planned ? 'planned' : 'unplanned'}` });
-      const actual = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; actual.checked = item.actual; actual.title = 'Actual/completed';
+      const actual = row.createEl('input', { type: 'checkbox' }); actual.checked = item.actual; actual.title = 'Actual/completed';
       actual.onchange = async () => { item.actual = actual.checked; await this.persist(false); await this.render(); };
       const edit = row.createEl('button', { text: 'Edit' }); edit.onclick = async () => { await this.editTimelineItem(item); };
       const del = row.createEl('button', { text: '×' }); del.onclick = async () => { this.record.timeline = this.record.timeline.filter((entry) => entry.id !== item.id); await this.persist(true); await this.render(); };
@@ -489,8 +485,7 @@ class LifeOSView extends ItemView {
     const record = date === this.selectedDate ? this.record : ((await loadRecord(this.app, date, this.plugin.settings)) ?? makeEmptyRecord(date, this.plugin.settings));
     const candidate = { id: 'candidate', title, start, end, type: safeType as TimelineEntry['type'], planned: true, actual: false };
     const conflicts = getConflicts([...record.timeline, candidate]).filter((conflict) => conflict.incoming.id === 'candidate' || conflict.existing.id === 'candidate');
-    const firstConflict = conflicts[0];
-    if (firstConflict && !window.confirm(`${firstConflict.message}\n\nAdd it anyway?`)) return;
+    if (conflicts.length && !window.confirm(`${conflicts[0].message}\n\nAdd it anyway?`)) return;
     record.timeline.push({ ...candidate, id: crypto.randomUUID() });
     await saveRecord(this.app, record, this.plugin.settings);
     if (date !== this.selectedDate) new Notice(`Planned ${title} on ${date}`);
@@ -508,7 +503,7 @@ class LifeOSView extends ItemView {
   renderCalendar(parent: HTMLElement): void {
     const section = this.section(parent, '📅 Activity calendar');
     section.createDiv({ text: 'Habit activity, planned work and completed work are shown as separate markers.', cls: 'life-os-help' });
-    const monthInput = section.createEl('input', { type: 'month' }) as HTMLInputElement;
+    const monthInput = section.createEl('input', { type: 'month' });
     monthInput.value = this.selectedDate.slice(0, 7);
     monthInput.onchange = () => this.renderCalendarGrid(section, monthInput.value);
     this.renderCalendarGrid(section, monthInput.value);
@@ -517,13 +512,15 @@ class LifeOSView extends ItemView {
   private renderCalendarGrid(section: HTMLElement, month: string): void {
     section.querySelector('.life-os-calendar-grid')?.remove();
     const grid = section.createDiv({ cls: 'life-os-calendar-grid' });
-    const [year = new Date().getFullYear(), mon = new Date().getMonth() + 1] = month.split('-').map(Number);
-    const first = new Date(year, mon - 1, 1).getDay();
-    const days = new Date(year, mon, 0).getDate();
+    const [year, mon] = month.split('-').map(Number);
+    const safeYear = Number.isFinite(year) ? year : Number(this.selectedDate.slice(0, 4));
+    const safeMonth = Number.isFinite(mon) && mon >= 1 && mon <= 12 ? mon : Number(this.selectedDate.slice(5, 7));
+    const first = new Date(safeYear, safeMonth - 1, 1).getDay();
+    const days = new Date(safeYear, safeMonth, 0).getDate();
     ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((day) => grid.createDiv({ text: day, cls: 'life-os-calendar-head' }));
     for (let i = 0; i < first; i++) grid.createDiv({ cls: 'life-os-calendar-empty' });
     for (let d = 1; d <= days; d++) {
-      const date = `${year}-${String(mon).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const date = `${safeYear}-${String(safeMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const cell = grid.createEl('button', { text: String(d), cls: 'life-os-calendar-day' });
       if (date === this.selectedDate) cell.addClass('is-selected');
       cell.onclick = async () => { this.selectedDate = date; await this.render(); };
@@ -572,8 +569,8 @@ class LifeOSView extends ItemView {
         const best = weekRecords[range.from];
         if (best) {
           const free = freeWindows(allEntriesForDate(this.plugin.settings, best, range.from), 30);
-          const firstFree = free[0];
-          if (firstFree) summary.createDiv({ text: `Next open window: ${firstFree.start}–${firstFree.end} on ${formatDay(range.from)}` });
+          const firstWindow = free[0];
+          if (firstWindow) summary.createDiv({ text: `Next open window: ${firstWindow.start}–${firstWindow.end} on ${formatDay(range.from)}` });
         }
       }
     }
@@ -639,7 +636,7 @@ class LifeOSView extends ItemView {
       column.addEventListener('drop', (event) => { event.preventDefault(); void this.dropUnscheduledOnPlanner(event, column, date); });
       const generated = generatedEntries(this.plugin.settings, date);
       const dayRecord = this.currentWeekRecords[date];
-      if (!dayRecord) continue;
+      if (!dayRecord) return;
       const entries = [...dayRecord.timeline, ...generated];
       const conflicts = getConflicts(entries);
       if (conflicts.length && this.plugin.settings.planningPreferences.showPlanningBadges) {
@@ -782,9 +779,9 @@ class LifeOSView extends ItemView {
         const conflictRecord = targetDate === sourceDate ? sourceRecord : ((await loadRecord(this.app, targetDate, this.plugin.settings)) ?? makeEmptyRecord(targetDate, this.plugin.settings));
         const candidateEntries = [...conflictRecord.timeline.filter((entry) => entry.id !== item.id), ...generatedEntries(this.plugin.settings, targetDate), sourceItem];
         const conflicts = getConflicts(candidateEntries).filter((conflict) => conflict.incoming.id === sourceItem.id || conflict.existing.id === sourceItem.id);
-        const firstConflict = conflicts[0];
-        if (firstConflict) {
-          new Notice(`Planner conflict: ${firstConflict.message}`);
+        if (conflicts.length) {
+          const conflict = conflicts[0];
+          if (conflict) new Notice(`Planner conflict: ${conflict.message}`);
           block.style.top = `${38 + (originalStart / 60) * 42}px`;
           block.style.height = `${Math.max(24, (originalDuration / 60) * 42 - 2)}px`;
           return;
@@ -856,7 +853,7 @@ class LifeOSView extends ItemView {
     header.createDiv({ text: 'Printable daily, weekly and monthly reports with food, exercise, study, prayer, tasks, habits, sleep, goals and time-allocation statistics.', cls: 'life-os-help' });
     const controls = header.createDiv({ cls: 'life-os-actions' });
     const period = controls.createEl('select');
-    (['day', 'week', 'month'] as ReportPeriod[]).forEach((p) => period.add(new Option(`${p.charAt(0).toUpperCase()}${p.slice(1)}`, p)));
+    (['day', 'week', 'month'] as ReportPeriod[]).forEach((p) => period.add(new Option(p.charAt(0).toUpperCase() + p.slice(1), p)));
     const format = controls.createEl('select');
     (['md', 'json', 'csv'] as ReportFormat[]).forEach((f) => format.add(new Option(f.toUpperCase(), f)));
     const exportButton = controls.createEl('button', { text: 'Export report' });
@@ -921,8 +918,8 @@ class LifeOSView extends ItemView {
       Object.entries({ manual: 'Manual', 'task-completion': 'Task completion', 'habit-consistency': 'Habit consistency', 'study-minutes': 'Study minutes', 'exercise-minutes': 'Exercise minutes', 'prayer-completion': 'Prayer completion' }).forEach(([value, label]) => metric.add(new Option(label, value)));
       metric.value = goal.metric;
       metric.onchange = async () => { goal.metric = metric.value as typeof goal.metric; await this.plugin.saveData(this.plugin.settings); await this.render(); };
-      const target = row.createEl('input', { type: 'number' }) as HTMLInputElement; target.value = String(goal.target); target.min = '1'; target.placeholder = 'Target'; target.onchange = async () => { goal.target = Number(target.value) || goal.target; await this.plugin.saveData(this.plugin.settings); await this.render(); };
-      const deadline = row.createEl('input', { type: 'date' }) as HTMLInputElement; deadline.value = goal.deadline ?? ''; deadline.onchange = async () => { goal.deadline = deadline.value || undefined; await this.plugin.saveData(this.plugin.settings); await this.render(); };
+      const target = row.createEl('input', { type: 'number' }); target.value = String(goal.target); target.min = '1'; target.placeholder = 'Target'; target.onchange = async () => { goal.target = Number(target.value) || goal.target; await this.plugin.saveData(this.plugin.settings); await this.render(); };
+      const deadline = row.createEl('input', { type: 'date' }); deadline.value = goal.deadline ?? ''; deadline.onchange = async () => { goal.deadline = deadline.value || undefined; await this.plugin.saveData(this.plugin.settings); await this.render(); };
       const remove = row.createEl('button', { text: 'Delete' });
       remove.onclick = async () => { deleteGoal(this.plugin.settings, goal.id); await this.plugin.saveData(this.plugin.settings); await this.render(); };
       if (goal.description) card.createDiv({ text: goal.description, cls: 'life-os-help' });
@@ -1049,11 +1046,11 @@ class LifeOSView extends ItemView {
     section.createDiv({ text: 'Create tasks with duration, priority, deadline and an optional goal link. These can later be placed into the visual planner.', cls: 'life-os-help' });
     const form = section.createDiv({ cls: 'life-os-inline-form' });
     const title = form.createEl('input'); title.placeholder = 'Task title';
-    const duration = form.createEl('input', { type: 'number' }) as HTMLInputElement; duration.placeholder = 'min'; duration.value = '30'; duration.min = '5';
+    const duration = form.createEl('input', { type: 'number' }); duration.placeholder = 'min'; duration.value = '30'; duration.min = '5';
     const priority = form.createEl('select'); ['low','medium','high','critical'].forEach((v) => priority.add(new Option(v, v))); priority.value = 'medium';
-    const deadline = form.createEl('input', { type: 'date' }) as HTMLInputElement;
+    const deadline = form.createEl('input', { type: 'date' });
     const goal = form.createEl('select'); goal.add(new Option('No goal', '')); this.plugin.settings.goals.filter((g) => g.status === 'active').forEach((g) => goal.add(new Option(g.title, g.id)));
-    const optionalLabel = form.createEl('label'); const optional = optionalLabel.createEl('input', { type: 'checkbox' }) as HTMLInputElement; optionalLabel.appendText(' optional');
+    const optionalLabel = form.createEl('label'); const optional = optionalLabel.createEl('input', { type: 'checkbox' }); optionalLabel.appendText(' optional');
     const add = form.createEl('button', { text: '＋ Add rich task' });
     add.onclick = async () => {
       if (!title.value.trim()) { new Notice('Enter a task title.'); return; }
@@ -1067,7 +1064,7 @@ class LifeOSView extends ItemView {
       row.createDiv({ text: task.title, cls: 'life-os-row-title' });
       row.createSpan({ text: `${task.durationMin ?? 0}m · ${task.priority}${task.deadline ? ` · due ${task.deadline}` : ''}` });
       const goalText = task.goalId ? this.plugin.settings.goals.find((g) => g.id === task.goalId)?.title : undefined; if (goalText) row.createSpan({ text: `🎯 ${goalText}`, cls: 'life-os-help' });
-      const done = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; done.checked = task.completed; done.onchange = async () => { task.completed = done.checked; if (done.checked && !this.record.tasksCompleted.includes(task.title)) this.record.tasksCompleted.push(task.title); await this.persist(false); };
+      const done = row.createEl('input', { type: 'checkbox' }); done.checked = task.completed; done.onchange = async () => { task.completed = done.checked; if (done.checked && !this.record.tasksCompleted.includes(task.title)) this.record.tasksCompleted.push(task.title); await this.persist(false); };
       const del = row.createEl('button', { text: '×' }); del.onclick = async () => { this.record.richTasks?.splice(index, 1); await this.persist(true); await this.render(); };
     });
   }
@@ -1089,7 +1086,7 @@ class LifeOSView extends ItemView {
 
   formNumber(parent: HTMLElement, label: string, value: number, set: (v: number) => void, min: number, max: number, step: number): void {
     const row = parent.createDiv({ cls: 'life-os-form-row' }); row.createSpan({ text: label });
-    const input = row.createEl('input', { type: 'number' }) as HTMLInputElement; input.value = String(value); input.min = String(min); input.max = String(max); input.step = String(step);
+    const input = row.createEl('input', { type: 'number' }); input.value = String(value); input.min = String(min); input.max = String(max); input.step = String(step);
     input.onchange = async () => { set(Number(input.value) || 0); await this.persist(false); };
   }
 
@@ -1135,7 +1132,7 @@ class LifeOSSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Goal-aware adaptive priorities').setDesc('Use active goal priority and deadlines when ranking suggested planning slots.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.goalAwareScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.goalAwareScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Planning conflict badges').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showPlanningBadges).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showPlanningBadges = value; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Planner snap minutes').addDropdown((dropdown: any) => { [5, 10, 15, 30].forEach((v: number) => dropdown.addOption(String(v), `${v} minutes`)); dropdown.setValue(String(this.plugin.settings.planningPreferences.slotMinutes)); dropdown.onChange(async (value: string) => { this.plugin.settings.planningPreferences.slotMinutes = Number(value) || 15; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text: any) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange(async (value: string) => { const parts = value.split(/[–-]/); const start = parts[0]?.trim(); const end = parts[1]?.trim(); if (start && end) { this.plugin.settings.planningPreferences.quietHoursStart = start; this.plugin.settings.planningPreferences.quietHoursEnd = end; await this.plugin.saveData(this.plugin.settings); } }));
+    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text: any) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange(async (value: string) => { const parts = value.split(/[–-]/); if (parts.length === 2) { this.plugin.settings.planningPreferences.quietHoursStart = parts[0].trim(); this.plugin.settings.planningPreferences.quietHoursEnd = parts[1].trim(); await this.plugin.saveData(this.plugin.settings); } }));
     new Setting(containerEl).setName('Performance & mobile optimization').setHeading();
     new Setting(containerEl).setName('Analytics cache').setDesc('Keep parsed daily records in memory to avoid repeated vault reads.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.performance.cacheEnabled).onChange(async (value: boolean) => { this.plugin.settings.performance.cacheEnabled = value; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Cache TTL (minutes)').addText((text: any) => text.setValue(String(this.plugin.settings.performance.cacheTtlMinutes)).onChange(async (value: string) => { const n = Math.min(1440, Math.max(1, Number(value) || 10)); this.plugin.settings.performance.cacheTtlMinutes = n; await this.plugin.saveData(this.plugin.settings); }));

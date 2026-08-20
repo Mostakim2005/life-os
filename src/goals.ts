@@ -1,6 +1,6 @@
-import { App, Notice } from 'obsidian';
-import { calculateStats, collectRecords } from './analytics';
-import { Goal, GoalMetric, GoalStatus, LifeOSSettings, Priority } from './types';
+import { App } from 'obsidian';
+import { calculateStats } from './analytics';
+import { Goal, GoalMetric, LifeOSSettings, Priority } from './types';
 
 export const DEFAULT_GOALS: Goal[] = [];
 
