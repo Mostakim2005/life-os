@@ -1,4 +1,4 @@
-import { DailyRecord, LifeOSSettings, HabitEntry, PrayerEntry, ExerciseEntry, MealEntry, StudySession, StudyPlanItem, TimelineEntry } from './types';
+import { DailyRecord, LifeOSSettings, PrayerEntry, ExerciseEntry, MealEntry, StudySession, StudyPlanItem, TimelineEntry } from './types';
 import { CURRENT_SCHEMA_VERSION, makeEmptyRecord, settingsWithDefaults } from './storage';
 
 export interface MigrationAudit { fromVersion: number; toVersion: number; changed: boolean; warnings: string[]; }

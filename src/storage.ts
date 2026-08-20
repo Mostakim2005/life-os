@@ -1,6 +1,6 @@
 import { App, TFile, Vault } from 'obsidian';
 import { DEFAULT_HABITS } from './presets';
-import { DailyRecord, Goal, HabitDefinition, LifeOSSettings } from './types';
+import { DailyRecord, LifeOSSettings } from './types';
 import { isIsoDate, sanitizeDailyRecord } from './record-validation';
 
 export const CURRENT_SCHEMA_VERSION = 3;
@@ -178,7 +178,8 @@ export async function loadRecord(app: App, date: string, settings: LifeOSSetting
     try {
       const json = jsonMatch[1];
       if (json === undefined) throw new Error('Missing Life OS JSON payload');
-      const parsed: Partial<DailyRecord> = JSON.parse(json);
+      const parsedUnknown: unknown = JSON.parse(json);
+      const parsed: Partial<DailyRecord> = isRecord(parsedUnknown) ? (parsedUnknown as Partial<DailyRecord>) : {};
       const empty = makeEmptyRecord(date, settings);
       return sanitizeDailyRecord(parsed, date, path, empty);
     } catch {
@@ -226,4 +227,8 @@ export function settingsWithDefaults(raw: Partial<LifeOSSettings> | null | undef
     performance: { ...DEFAULT_SETTINGS.performance, ...(source.performance ?? {}) },
     migration: { ...DEFAULT_SETTINGS.migration, ...(source.migration ?? {}) }
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

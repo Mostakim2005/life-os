@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-misused-promises -- Obsidian UI and DOM event callbacks are void-returning APIs; these handlers intentionally launch asynchronous persistence/render work. */
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion -- UI value narrowing is intentionally kept explicit at plugin boundaries. */
 import { ItemView, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf } from 'obsidian';
 import { calculateStats, collectRecords, lastNDays, calculateYearlyStats, monthlyTrendPoints } from './analytics';
 import { DEFAULT_HABITS, EXERCISE_PRESETS, FOOD_PRESETS } from './presets';
@@ -32,7 +34,8 @@ export class LifeOSPlugin extends Plugin {
   settings: LifeOSSettings = DEFAULT_SETTINGS;
 
   async onload(): Promise<void> {
-    const migration = migrateSettings(await this.loadData());
+    const rawData: unknown = await this.loadData();
+    const migration = migrateSettings(toPartialSettings(rawData));
     this.settings = migration.settings;
     if (migration.audit.changed) await this.saveData(this.settings);
     const dailyRoot = this.settings.dailyNotesFolder.replace(/\/+$/, '') + '/';
@@ -59,9 +62,9 @@ export class LifeOSPlugin extends Plugin {
     this.addCommand({ id: 'import-markdown-tasks', name: 'Import Markdown/Tasks into Life OS', callback: () => void this.importTasksIntoDay(todayISO()) });
     this.addCommand({ id: 'create-templater-template', name: 'Create Life OS Templater template', callback: () => void this.createTemplaterTemplate() });
     this.addCommand({ id: 'migrate-life-os-data', name: 'Migrate/import Life OS legacy data', callback: () => void this.migrateData() });
-    this.addCommand({ id: 'life-os-copy-dataview-query', name: 'Copy Dataview Life OS query', callback: () => this.settings.integrations.dataview ? copyText(lifeOSDataviewQuery(), 'Dataview query copied') : Promise.resolve(new Notice('Dataview integration is disabled in settings.')) });
-    this.addCommand({ id: 'life-os-copy-dataview-summary-query', name: 'Copy Dataview Life OS summary query', callback: () => this.settings.integrations.dataview ? copyText(lifeOSDataviewSummaryQuery(), 'Dataview summary query copied') : Promise.resolve(new Notice('Dataview integration is disabled in settings.')) });
-    this.addCommand({ id: 'life-os-copy-templater-template', name: 'Copy Life OS Templater template', callback: () => this.settings.integrations.templater ? copyText(lifeOSTemplaterTemplate(), 'Templater template copied') : Promise.resolve(new Notice('Templater integration is disabled in settings.')) });
+    this.addCommand({ id: 'life-os-copy-dataview-query', name: 'Copy Dataview Life OS query', callback: () => { if (this.settings.integrations.dataview) void copyText(lifeOSDataviewQuery(), 'Dataview query copied'); else new Notice('Dataview integration is disabled in settings.'); } });
+    this.addCommand({ id: 'life-os-copy-dataview-summary-query', name: 'Copy Dataview Life OS summary query', callback: () => { if (this.settings.integrations.dataview) void copyText(lifeOSDataviewSummaryQuery(), 'Dataview summary query copied'); else new Notice('Dataview integration is disabled in settings.'); } });
+    this.addCommand({ id: 'life-os-copy-templater-template', name: 'Copy Life OS Templater template', callback: () => { if (this.settings.integrations.templater) void copyText(lifeOSTemplaterTemplate(), 'Templater template copied'); else new Notice('Templater integration is disabled in settings.'); } });
     this.addCommand({ id: 'life-os-copy-task-metadata-guide', name: 'Copy Life OS task metadata guide', callback: () => copyText(tasksMetadataGuide(), 'Task metadata guide copied') });
     this.addSettingTab(new LifeOSSettingTab(this.app, this));
   }
@@ -71,7 +74,7 @@ export class LifeOSPlugin extends Plugin {
     if (existing.length) {
       const leaf = existing[0];
       if (!leaf) return;
-      this.app.workspace.revealLeaf(leaf);
+      await leaf.setViewState({ type: VIEW_TYPE, active: true });
       const view = leaf.view as LifeOSView;
       view.activeTab = tab;
       await view.render();
@@ -79,7 +82,6 @@ export class LifeOSPlugin extends Plugin {
     }
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.setViewState({ type: VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
     const view = leaf.view as LifeOSView;
     view.activeTab = tab;
     await view.render();
@@ -186,7 +188,6 @@ class LifeOSView extends ItemView {
     const root = this.containerEl;
     root.empty();
     root.addClass('life-os-root');
-    this.injectStyles();
 
     const header = root.createDiv({ cls: 'life-os-header' });
     const title = header.createDiv();
@@ -212,7 +213,7 @@ class LifeOSView extends ItemView {
     if (this.activeTab === 'reports') { await this.renderReports(root); return; }
 
     const controls = header.createDiv({ cls: 'life-os-header-controls' });
-    const date = controls.createEl('input', { type: 'date' }) as HTMLInputElement;
+    const date = controls.createEl('input', { type: 'date' });
     date.value = this.selectedDate;
     date.onchange = async () => { this.selectedDate = date.value; await this.render(); };
     const today = controls.createEl('button', { text: 'Today' });
@@ -266,10 +267,10 @@ class LifeOSView extends ItemView {
     this.record.prayers.forEach((prayer) => {
       const row = section.createDiv({ cls: 'life-os-row' });
       row.createDiv({ text: prayer.name, cls: 'life-os-row-title' });
-      const time = row.createEl('input', { type: 'time' }) as HTMLInputElement;
+      const time = row.createEl('input', { type: 'time' });
       time.value = prayer.time;
       time.onchange = async () => { prayer.time = time.value; await this.persist(false); };
-      const select = row.createEl('select') as HTMLSelectElement;
+      const select = row.createEl('select');
       (['not-tracked', 'completed', 'late', 'missed'] as PrayerStatus[]).forEach((status) => select.add(new Option(status.replace('-', ' '), status)));
       select.value = prayer.status;
       select.onchange = async () => {
@@ -294,7 +295,7 @@ class LifeOSView extends ItemView {
     this.plugin.settings.defaultStudySubjects.forEach((value) => subject.add(new Option(value, value)));
     subject.add(new Option('Custom subject…', '__custom__'));
     const topic = controls.createEl('input'); topic.placeholder = 'Topic / chapter';
-    const minutes = controls.createEl('input', { type: 'number' }) as HTMLInputElement; minutes.min = '1'; minutes.value = '60';
+    const minutes = controls.createEl('input', { type: 'number' }); minutes.min = '1'; minutes.value = '60';
     const type = controls.createEl('select');
     (['study', 'revision', 'practice', 'lecture', 'reading', 'exam', 'assignment', 'other'] as StudySessionType[]).forEach((value) => type.add(new Option(value, value)));
     const add = controls.createEl('button', { text: 'Log study' });
@@ -314,12 +315,12 @@ class LifeOSView extends ItemView {
     const planControls = section.createDiv({ cls: 'life-os-inline-form' });
     const planSubject = planControls.createEl('input'); planSubject.placeholder = 'Plan subject';
     const planTopic = planControls.createEl('input'); planTopic.placeholder = 'Plan topic';
-    const planMinutes = planControls.createEl('input', { type: 'number' }) as HTMLInputElement; planMinutes.value = '60'; planMinutes.min = '1';
-    const planStart = planControls.createEl('input', { type: 'time' }) as HTMLInputElement; planStart.value = '19:00';
-    const planEnd = planControls.createEl('input', { type: 'time' }) as HTMLInputElement; planEnd.value = '20:00';
+    const planMinutes = planControls.createEl('input', { type: 'number' }); planMinutes.value = '60'; planMinutes.min = '1';
+    const planStart = planControls.createEl('input', { type: 'time' }); planStart.value = '19:00';
+    const planEnd = planControls.createEl('input', { type: 'time' }); planEnd.value = '20:00';
     const priority = planControls.createEl('select'); ['low','medium','high','critical'].forEach((v) => priority.add(new Option(v, v))); priority.value = 'medium';
     const goal = planControls.createEl('select'); goal.add(new Option('No goal', '')); this.plugin.settings.goals.filter((g) => g.status === 'active').forEach((g) => goal.add(new Option(g.title, g.id)));
-    const optional = planControls.createEl('label'); const opt = optional.createEl('input', { type: 'checkbox' }) as HTMLInputElement; optional.appendText(' optional');
+    const optional = planControls.createEl('label'); const opt = optional.createEl('input', { type: 'checkbox' }); optional.appendText(' optional');
     const plan = planControls.createEl('button', { text: '＋ Add study plan' });
     plan.onclick = async () => {
       if (!planSubject.value.trim() || !planTopic.value.trim()) { new Notice('Enter subject and topic.'); return; }
@@ -335,7 +336,7 @@ class LifeOSView extends ItemView {
       const row = section.createDiv({ cls: 'life-os-row' });
       row.createDiv({ text: `${session.subject} · ${session.topic}`, cls: 'life-os-row-title' });
       row.createSpan({ text: `${session.durationMin} min · ${session.type}` });
-      const done = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; done.checked = session.completed; done.title = 'Completed';
+      const done = row.createEl('input', { type: 'checkbox' }); done.checked = session.completed; done.title = 'Completed';
       done.onchange = async () => { session.completed = done.checked; await this.persist(false); };
       const del = row.createEl('button', { text: '×' });
       del.onclick = async () => { this.record.studySessions.splice(index, 1); await this.persist(true); await this.render(); };
@@ -347,7 +348,7 @@ class LifeOSView extends ItemView {
         const row = section.createDiv({ cls: 'life-os-row' });
         row.createDiv({ text: `${item.subject} · ${item.topic}`, cls: 'life-os-row-title' });
         row.createSpan({ text: `${item.targetMinutes} min${item.start ? ` · ${item.start}-${item.end}` : ''}${item.optional ? ' · optional' : ''}` });
-        const done = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; done.checked = item.completed;
+        const done = row.createEl('input', { type: 'checkbox' }); done.checked = item.completed;
         done.onchange = async () => { item.completed = done.checked; await this.persist(false); };
         const del = row.createEl('button', { text: '×' });
         del.onclick = async () => { this.record.studyPlan.splice(index, 1); await this.persist(true); await this.render(); };
@@ -363,19 +364,19 @@ class LifeOSView extends ItemView {
       row.createDiv({ text: `${habit.icon} ${habit.name}`, cls: 'life-os-row-title' });
       const current = this.record.habits[habit.id] ?? defaultHabitEntry(habit);
       if (habit.type === 'boolean') {
-        const input = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; input.checked = Boolean(current.value);
+        const input = row.createEl('input', { type: 'checkbox' }); input.checked = Boolean(current.value);
         input.onchange = async () => { current.value = input.checked; this.record.habits[habit.id] = current; await this.persist(false); };
       } else if (habit.type === 'subtasks') {
         const wrap = row.createDiv({ cls: 'life-os-subtasks' });
         const vals = Array.isArray(current.value) ? current.value : [];
         (habit.subtasks ?? []).forEach((name, i) => {
           const label = wrap.createEl('label');
-          const input = label.createEl('input', { type: 'checkbox' }) as HTMLInputElement; input.checked = Number(vals[i]) === 1;
+          const input = label.createEl('input', { type: 'checkbox' }); input.checked = Number(vals[i]) === 1;
           input.onchange = async () => { const next = (Array.isArray(current.value) ? [...current.value] : []).map(Number); while (next.length < (habit.subtasks ?? []).length) next.push(0); next[i] = input.checked ? 1 : 0; current.value = next; this.record.habits[habit.id] = current; await this.persist(false); };
           label.appendText(name);
         });
       } else {
-        const input = row.createEl('input', { type: 'number' }) as HTMLInputElement;
+        const input = row.createEl('input', { type: 'number' });
         input.min = '0'; input.step = '0.1'; input.value = String(typeof current.value === 'number' ? current.value : 0);
         input.onchange = async () => { current.value = Number(input.value) || 0; this.record.habits[habit.id] = current; await this.persist(false); };
         if (habit.target !== undefined) row.createSpan({ text: ` / ${habit.target} ${habit.unit ?? ''}` });
@@ -449,7 +450,7 @@ class LifeOSView extends ItemView {
       row.createDiv({ text: `${item.start}-${item.end}`, cls: 'life-os-time' });
       row.createDiv({ text: item.title, cls: 'life-os-row-title' });
       row.createSpan({ text: `${item.type} · ${item.planned ? 'planned' : 'unplanned'}` });
-      const actual = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; actual.checked = item.actual; actual.title = 'Actual/completed';
+      const actual = row.createEl('input', { type: 'checkbox' }); actual.checked = item.actual; actual.title = 'Actual/completed';
       actual.onchange = async () => { item.actual = actual.checked; await this.persist(false); await this.render(); };
       const edit = row.createEl('button', { text: 'Edit' }); edit.onclick = async () => { await this.editTimelineItem(item); };
       const del = row.createEl('button', { text: '×' }); del.onclick = async () => { this.record.timeline = this.record.timeline.filter((entry) => entry.id !== item.id); await this.persist(true); await this.render(); };
@@ -460,8 +461,7 @@ class LifeOSView extends ItemView {
     const start = timeToMinutes(item.start);
     const duration = diffMinutes(item.start, item.end);
     const block = parent.createDiv({ cls: `life-os-time-block ${item.actual ? 'is-actual' : 'is-planned'}` });
-    block.style.left = `${Math.min(start / 1440, 1) * 100}%`;
-    block.style.width = `${Math.max(1, Math.min(duration / 1440, 1) * 100)}%`;
+    block.setCssProps({ '--life-os-left': `${Math.min(start / 1440, 1) * 100}%`, '--life-os-width': `${Math.max(1, Math.min(duration / 1440, 1) * 100)}%` });
     block.textContent = item.title;
     block.title = `${item.start}-${item.end} · ${item.type} · ${item.actual ? 'actual' : 'planned'}`;
     block.onclick = () => void this.editTimelineItem(item);
@@ -473,9 +473,9 @@ class LifeOSView extends ItemView {
     const start = window.prompt('Start (HH:MM):', '09:00') || '09:00';
     const end = window.prompt('End (HH:MM):', '10:00') || '10:00';
     const type = window.prompt('Type: task / habit / study / exercise / meal / prayer / rest / other', 'task') || 'other';
-    const safeType = ['task', 'habit', 'study', 'exercise', 'meal', 'prayer', 'rest', 'other'].includes(type) ? type : 'other';
+    const safeType: TimelineEntry['type'] = isTimelineType(type) ? type : 'other';
     const record = date === this.selectedDate ? this.record : ((await loadRecord(this.app, date, this.plugin.settings)) ?? makeEmptyRecord(date, this.plugin.settings));
-    const candidate = { id: 'candidate', title, start, end, type: safeType as TimelineEntry['type'], planned: true, actual: false };
+    const candidate = { id: 'candidate', title, start, end, type: safeType, planned: true, actual: false };
     const conflicts = getConflicts([...record.timeline, candidate]).filter((conflict) => conflict.incoming.id === 'candidate' || conflict.existing.id === 'candidate');
     const firstConflict = conflicts[0];
     if (firstConflict && !window.confirm(`${firstConflict.message}\n\nAdd it anyway?`)) return;
@@ -496,7 +496,7 @@ class LifeOSView extends ItemView {
   renderCalendar(parent: HTMLElement): void {
     const section = this.section(parent, '📅 Activity calendar');
     section.createDiv({ text: 'Habit activity, planned work and completed work are shown as separate markers.', cls: 'life-os-help' });
-    const monthInput = section.createEl('input', { type: 'month' }) as HTMLInputElement;
+    const monthInput = section.createEl('input', { type: 'month' });
     monthInput.value = this.selectedDate.slice(0, 7);
     monthInput.onchange = () => this.renderCalendarGrid(section, monthInput.value);
     this.renderCalendarGrid(section, monthInput.value);
@@ -616,16 +616,16 @@ class LifeOSView extends ItemView {
     const grid = root.createDiv({ cls: 'life-os-week-grid life-os-week-grid-interactive' });
     for (let hour = 0; hour < 24; hour++) {
       const label = grid.createDiv({ cls: 'life-os-week-hour', text: `${String(hour).padStart(2, '0')}:00` });
-      label.style.gridRow = String(hour + 2); label.style.gridColumn = '1';
+      label.setCssProps({ '--life-os-grid-row': String(hour + 2), '--life-os-grid-column': '1' });
     }
     for (let day = 0; day < 7; day++) {
       const date = shiftDate(range.from, day);
       const column = grid.createDiv({ cls: 'life-os-week-day' });
       column.dataset.date = date;
-      column.style.gridColumn = String(day + 2); column.style.gridRow = '1 / span 25';
+      column.setCssProps({ '--life-os-grid-column': String(day + 2), '--life-os-grid-row': '1 / span 25' });
       const head = column.createDiv({ cls: 'life-os-week-day-head' });
       head.createDiv({ text: formatDay(date) }); head.createDiv({ text: date.slice(5), cls: 'life-os-help' });
-      for (let h = 0; h < 24; h++) { const slot = column.createDiv({ cls: 'life-os-week-slot' }); slot.style.top = `${38 + h * 42}px`; }
+      for (let h = 0; h < 24; h++) { const slot = column.createDiv({ cls: 'life-os-week-slot' }); slot.setCssProps({ '--life-os-top': `${38 + h * 42}px` }); }
       column.addEventListener('dragover', (event) => { if (this.plugin.settings.planningPreferences.enableDragUnscheduled) event.preventDefault(); });
       column.addEventListener('drop', (event) => { event.preventDefault(); void this.dropUnscheduledOnPlanner(event, column, date); });
       const generated = generatedEntries(this.plugin.settings, date);
@@ -638,7 +638,7 @@ class LifeOSView extends ItemView {
       }
       for (const item of entries) this.createPlannerBlock(column, date, item);
       const planButton = column.createEl('button', { text: '+', cls: 'life-os-day-add' });
-      planButton.style.top = '6px'; planButton.onclick = async () => { await this.addTimelineItem(date); };
+      planButton.setCssProps({ '--life-os-top': '6px' }); planButton.onclick = () => { void this.addTimelineItem(date); };
     }
   }
 
@@ -728,8 +728,7 @@ class LifeOSView extends ItemView {
     if (item.id.startsWith('rule:')) block.dataset.rule = 'true';
     const start = timeToMinutes(item.start);
     const duration = diffMinutes(item.start, item.end);
-    block.style.top = `${38 + (start / 60) * 42}px`;
-    block.style.height = `${Math.max(24, (duration / 60) * 42 - 2)}px`;
+    block.setCssProps({ '--life-os-top': `${38 + (start / 60) * 42}px`, '--life-os-height': `${Math.max(24, (duration / 60) * 42 - 2)}px` });
     block.createDiv({ text: item.title, cls: 'life-os-planner-block-title' });
     block.createDiv({ text: `${item.start}–${item.end} · ${item.type}`, cls: 'life-os-planner-block-meta' });
     const resize = block.createDiv({ cls: 'life-os-planner-resize' });
@@ -747,8 +746,7 @@ class LifeOSView extends ItemView {
       document.body.classList.remove('life-os-planner-dragging');
       const sourceDate = date;
       const targetNode = document.elementFromPoint(event.clientX, event.clientY);
-      const closestNode = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') : null;
-      const targetEl = closestNode instanceof HTMLElement ? closestNode : null;
+      const targetEl = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') : null;
       const targetDate = targetEl?.dataset.date ?? sourceDate;
       const sourceRecord = (await loadRecord(this.app, sourceDate, this.plugin.settings)) ?? makeEmptyRecord(sourceDate, this.plugin.settings);
       const ruleGenerated = item.id.startsWith('rule:');
@@ -777,8 +775,7 @@ class LifeOSView extends ItemView {
           const firstConflict = conflicts[0];
           if (!firstConflict) return;
           new Notice(`Planner conflict: ${firstConflict.message}`);
-          block.style.top = `${38 + (originalStart / 60) * 42}px`;
-          block.style.height = `${Math.max(24, (originalDuration / 60) * 42 - 2)}px`;
+          block.setCssProps({ '--life-os-top': `${38 + (originalStart / 60) * 42}px`, '--life-os-height': `${Math.max(24, (originalDuration / 60) * 42 - 2)}px` });
           return;
         }
         if (ruleGenerated) {
@@ -808,10 +805,10 @@ class LifeOSView extends ItemView {
       const delta = event.clientY - pointerStartY;
       if (mode === 'drag') {
         const provisional = snapMinutes(originalStart + (delta / 42) * 60, this.plugin.settings.planningPreferences.slotMinutes);
-        block.style.top = `${38 + (provisional / 60) * 42}px`;
+        block.setCssProps({ '--life-os-top': `${38 + (provisional / 60) * 42}px` });
       } else {
         const provisional = snapMinutes(originalDuration + (delta / 42) * 60, this.plugin.settings.planningPreferences.slotMinutes);
-        block.style.height = `${Math.max(24, (Math.max(15, provisional) / 60) * 42 - 2)}px`;
+        block.setCssProps({ '--life-os-height': `${Math.max(24, (Math.max(15, provisional) / 60) * 42 - 2)}px` });
       }
     };
     const begin = (event: PointerEvent, nextMode: 'drag' | 'resize'): void => {
@@ -819,7 +816,7 @@ class LifeOSView extends ItemView {
       event.preventDefault(); event.stopPropagation();
       mode = nextMode; pointerStartY = event.clientY; originalStart = timeToMinutes(item.start); originalDuration = diffMinutes(item.start, item.end); moved = false;
       document.body.classList.add('life-os-planner-dragging');
-      document.addEventListener('pointermove', move); document.addEventListener('pointerup', finish);
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', (event) => { void finish(event); });
     };
     block.addEventListener('pointerdown', (event) => {
       if ((event.target as HTMLElement).closest('.life-os-planner-resize')) return;
@@ -904,17 +901,17 @@ class LifeOSView extends ItemView {
       const priority = head.createEl('select');
       ['low', 'medium', 'high', 'critical'].forEach((value) => priority.add(new Option(value, value)));
       priority.value = goal.priority;
-      priority.onchange = async () => { goal.priority = priority.value as typeof goal.priority; await this.plugin.saveData(this.plugin.settings); await this.render(); };
+      priority.onchange = async () => { goal.priority = toPriority(priority.value); await this.plugin.saveData(this.plugin.settings); await this.render(); };
       const meta = card.createDiv({ text: `${goalSummary(goal)} · ${metricLabel(goal.metric)}`, cls: 'life-os-help' });
       const bar = card.createDiv({ cls: 'life-os-goal-bar' });
-      bar.createDiv({ cls: 'life-os-goal-fill' }).style.width = `${goalProgressPct(goal)}%`;
+      const fill = bar.createDiv({ cls: 'life-os-goal-fill' }); fill.setCssProps({ '--life-os-width': `${goalProgressPct(goal)}%` });
       const row = card.createDiv({ cls: 'life-os-goal-actions' });
       const metric = row.createEl('select');
       Object.entries({ manual: 'Manual', 'task-completion': 'Task completion', 'habit-consistency': 'Habit consistency', 'study-minutes': 'Study minutes', 'exercise-minutes': 'Exercise minutes', 'prayer-completion': 'Prayer completion' }).forEach(([value, label]) => metric.add(new Option(label, value)));
       metric.value = goal.metric;
-      metric.onchange = async () => { goal.metric = metric.value as typeof goal.metric; await this.plugin.saveData(this.plugin.settings); await this.render(); };
-      const target = row.createEl('input', { type: 'number' }) as HTMLInputElement; target.value = String(goal.target); target.min = '1'; target.placeholder = 'Target'; target.onchange = async () => { goal.target = Number(target.value) || goal.target; await this.plugin.saveData(this.plugin.settings); await this.render(); };
-      const deadline = row.createEl('input', { type: 'date' }) as HTMLInputElement; deadline.value = goal.deadline ?? ''; deadline.onchange = async () => { goal.deadline = deadline.value || undefined; await this.plugin.saveData(this.plugin.settings); await this.render(); };
+      metric.onchange = async () => { goal.metric = toGoalMetric(metric.value); await this.plugin.saveData(this.plugin.settings); await this.render(); };
+      const target = row.createEl('input', { type: 'number' }); target.value = String(goal.target); target.min = '1'; target.placeholder = 'Target'; target.onchange = async () => { goal.target = Number(target.value) || goal.target; await this.plugin.saveData(this.plugin.settings); await this.render(); };
+      const deadline = row.createEl('input', { type: 'date' }); deadline.value = goal.deadline ?? ''; deadline.onchange = async () => { goal.deadline = deadline.value || undefined; await this.plugin.saveData(this.plugin.settings); await this.render(); };
       const remove = row.createEl('button', { text: 'Delete' });
       remove.onclick = async () => { deleteGoal(this.plugin.settings, goal.id); await this.plugin.saveData(this.plugin.settings); await this.render(); };
       if (goal.description) card.createDiv({ text: goal.description, cls: 'life-os-help' });
@@ -983,7 +980,7 @@ class LifeOSView extends ItemView {
     points.forEach((point) => {
       const item = plot.createDiv({ cls: 'life-os-chart-point' });
       const bar = item.createDiv({ cls: 'life-os-chart-bar' });
-      bar.style.height = `${Math.max(3, (point.value / max) * 100)}%`;
+      bar.setCssProps({ '--life-os-height': `${Math.max(3, (point.value / max) * 100)}%` });
       bar.title = `${point.label}: ${niceLabel(point.value)}${suffix}`;
       item.createDiv({ text: point.label, cls: 'life-os-chart-label' });
     });
@@ -1041,15 +1038,15 @@ class LifeOSView extends ItemView {
     section.createDiv({ text: 'Create tasks with duration, priority, deadline and an optional goal link. These can later be placed into the visual planner.', cls: 'life-os-help' });
     const form = section.createDiv({ cls: 'life-os-inline-form' });
     const title = form.createEl('input'); title.placeholder = 'Task title';
-    const duration = form.createEl('input', { type: 'number' }) as HTMLInputElement; duration.placeholder = 'min'; duration.value = '30'; duration.min = '5';
+    const duration = form.createEl('input', { type: 'number' }); duration.placeholder = 'min'; duration.value = '30'; duration.min = '5';
     const priority = form.createEl('select'); ['low','medium','high','critical'].forEach((v) => priority.add(new Option(v, v))); priority.value = 'medium';
-    const deadline = form.createEl('input', { type: 'date' }) as HTMLInputElement;
+    const deadline = form.createEl('input', { type: 'date' });
     const goal = form.createEl('select'); goal.add(new Option('No goal', '')); this.plugin.settings.goals.filter((g) => g.status === 'active').forEach((g) => goal.add(new Option(g.title, g.id)));
-    const optionalLabel = form.createEl('label'); const optional = optionalLabel.createEl('input', { type: 'checkbox' }) as HTMLInputElement; optionalLabel.appendText(' optional');
+    const optionalLabel = form.createEl('label'); const optional = optionalLabel.createEl('input', { type: 'checkbox' }); optionalLabel.appendText(' optional');
     const add = form.createEl('button', { text: '＋ Add rich task' });
     add.onclick = async () => {
       if (!title.value.trim()) { new Notice('Enter a task title.'); return; }
-      const task = { id: crypto.randomUUID(), title: title.value.trim(), completed: false, optional: optional.checked, priority: priority.value as any, durationMin: Number(duration.value) || 30, deadline: deadline.value || undefined, goalId: goal.value || undefined };
+      const task = { id: crypto.randomUUID(), title: title.value.trim(), completed: false, optional: optional.checked, priority: toPriority(priority.value), durationMin: Number(duration.value) || 30, deadline: deadline.value || undefined, goalId: goal.value || undefined };
       this.record.richTasks = [...(this.record.richTasks ?? []), task];
       if (!this.record.tasksPlanned.includes(task.title)) this.record.tasksPlanned.push(task.title);
       await this.persist(true); await this.render();
@@ -1059,7 +1056,7 @@ class LifeOSView extends ItemView {
       row.createDiv({ text: task.title, cls: 'life-os-row-title' });
       row.createSpan({ text: `${task.durationMin ?? 0}m · ${task.priority}${task.deadline ? ` · due ${task.deadline}` : ''}` });
       const goalText = task.goalId ? this.plugin.settings.goals.find((g) => g.id === task.goalId)?.title : undefined; if (goalText) row.createSpan({ text: `🎯 ${goalText}`, cls: 'life-os-help' });
-      const done = row.createEl('input', { type: 'checkbox' }) as HTMLInputElement; done.checked = task.completed; done.onchange = async () => { task.completed = done.checked; if (done.checked && !this.record.tasksCompleted.includes(task.title)) this.record.tasksCompleted.push(task.title); await this.persist(false); };
+      const done = row.createEl('input', { type: 'checkbox' }); done.checked = task.completed; done.onchange = async () => { task.completed = done.checked; if (done.checked && !this.record.tasksCompleted.includes(task.title)) this.record.tasksCompleted.push(task.title); await this.persist(false); };
       const del = row.createEl('button', { text: '×' }); del.onclick = async () => { this.record.richTasks?.splice(index, 1); await this.persist(true); await this.render(); };
     });
   }
@@ -1081,70 +1078,82 @@ class LifeOSView extends ItemView {
 
   formNumber(parent: HTMLElement, label: string, value: number, set: (v: number) => void, min: number, max: number, step: number): void {
     const row = parent.createDiv({ cls: 'life-os-form-row' }); row.createSpan({ text: label });
-    const input = row.createEl('input', { type: 'number' }) as HTMLInputElement; input.value = String(value); input.min = String(min); input.max = String(max); input.step = String(step);
+    const input = row.createEl('input', { type: 'number' }); input.value = String(value); input.min = String(min); input.max = String(max); input.step = String(step);
     input.onchange = async () => { set(Number(input.value) || 0); await this.persist(false); };
   }
 
   section(parent: HTMLElement, title: string): HTMLElement { const section = parent.createDiv({ cls: 'life-os-section' }); section.createEl('h2', { text: title }); return section; }
   async persist(notice: boolean): Promise<void> { this.record.updatedAt = new Date().toISOString(); await saveRecord(this.app, this.record, this.plugin.settings); if (notice) new Notice('Life OS saved'); }
 
-  injectStyles(): void {
-    // Obsidian loads styles.css automatically; no runtime stylesheet injection needed.
-  }
 }
 
+/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Obsidian Setting component callbacks are typed through the installed API boundary; values are validated before persistence. */
+/* eslint-disable @typescript-eslint/no-unsafe-return -- Settings callbacks return Obsidian component builders whose API is provided by the host. */
+/* eslint-disable @typescript-eslint/no-unsafe-call -- Settings controls are constructed through the Obsidian host UI API. */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access -- Settings controls are accessed through the Obsidian host UI API. */
 class LifeOSSettingTab extends PluginSettingTab {
   plugin: LifeOSPlugin;
   constructor(app: import('obsidian').App, plugin: LifeOSPlugin) { super(app, plugin); this.plugin = plugin; }
   display(): void {
-    const { containerEl } = this; containerEl.empty();
+    const { containerEl } = this;
+    containerEl.empty();
+    const save = (mutate: () => void, refresh = false): void => {
+      mutate();
+      void this.plugin.saveData(this.plugin.settings)
+        .then(() => { if (refresh) this.display(); })
+        .catch((error: unknown) => { console.error('Life OS settings save failed', error); new Notice('Unable to save Life OS settings.'); });
+    };
     new Setting(containerEl).setName('Life OS').setDesc('Local-first daily life, study, planning and review tracker.');
-    new Setting(containerEl).setName('Daily notes folder').addText((text: any) => text.setValue(this.plugin.settings.dailyNotesFolder).onChange(async (value: string) => { this.plugin.settings.dailyNotesFolder = value.trim() || DEFAULT_SETTINGS.dailyNotesFolder; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Export/review folder').addText((text: any) => text.setValue(this.plugin.settings.dashboardNoteFolder).onChange(async (value: string) => { this.plugin.settings.dashboardNoteFolder = value.trim() || DEFAULT_SETTINGS.dashboardNoteFolder; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Reports folder').addText((text: any) => text.setValue(this.plugin.settings.reportFolder).onChange(async (value: string) => { this.plugin.settings.reportFolder = value.trim() || DEFAULT_SETTINGS.reportFolder; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Automatic prayer-time calculation').setDesc('Calculate prayer times from date, latitude, longitude, method and madhab. Turn off to use manual default times.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.prayerCalculation.enabled).onChange(async (value: boolean) => { this.plugin.settings.prayerCalculation.enabled = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Prayer latitude').addText((text: any) => text.setValue(String(this.plugin.settings.prayerCalculation.latitude)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.latitude = Number(value) || this.plugin.settings.prayerCalculation.latitude; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Prayer longitude').addText((text: any) => text.setValue(String(this.plugin.settings.prayerCalculation.longitude)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.longitude = Number(value) || this.plugin.settings.prayerCalculation.longitude; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Prayer calculation method').addDropdown((dropdown: any) => { ['karachi','mwl','isna','egyptian','tehran','jafari'].forEach((v: string) => dropdown.addOption(v, v.toUpperCase())); dropdown.setValue(this.plugin.settings.prayerCalculation.method).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.method = value as any; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Asr madhab').addDropdown((dropdown: any) => { dropdown.addOption('hanafi','Hanafi'); dropdown.addOption('shafii','Shafi / standard'); dropdown.setValue(this.plugin.settings.prayerCalculation.madhab).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.madhab = value as any; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Prayer minute adjustment').setDesc('Add/subtract minutes from calculated times.').addText((text: any) => text.setValue(String(this.plugin.settings.prayerCalculation.minuteAdjustment)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.minuteAdjustment = Number(value) || 0; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Prayer & integration features').setHeading();
-    new Setting(containerEl).setName('Default prayer times').setDesc('Copied into newly-created daily records when automatic calculation is disabled.');
-    Object.keys(this.plugin.settings.defaultPrayerTimes).forEach((name) => new Setting(containerEl).setName(name).addText((text: any) => text.setValue(this.plugin.settings.defaultPrayerTimes[name] ?? '').onChange(async (value: string) => { this.plugin.settings.defaultPrayerTimes[name] = value; await this.plugin.saveData(this.plugin.settings); })));
-    new Setting(containerEl).setName('Study subjects').setDesc('Comma-separated preset subjects.').addText((text: any) => text.setValue(this.plugin.settings.defaultStudySubjects.join(', ')).onChange(async (value: string) => { this.plugin.settings.defaultStudySubjects = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Habits').setDesc('Enable or disable starter habits.').setHeading();
-    this.plugin.settings.habits.forEach((habit) => new Setting(containerEl).setName(`${habit.icon} ${habit.name} · ${habit.type}`).addToggle((toggle: any) => toggle.setValue(habit.enabled).onChange(async (value: boolean) => { habit.enabled = value; await this.plugin.saveData(this.plugin.settings); })));
-    new Setting(containerEl).setName('Food categories').setDesc('Comma-separated preset categories.').addText((text: any) => text.setValue(this.plugin.settings.enabledFoodPresetCategories.join(', ')).onChange(async (value: string) => { this.plugin.settings.enabledFoodPresetCategories = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Intelligent scheduling').setDesc('Turn the planning assistant on/off.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.intelligentScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.intelligentScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Show free-time discovery').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showFreeTime).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showFreeTime = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Conflict suggestions').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showConflictSuggestions).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showConflictSuggestions = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Drag unscheduled tasks/study into planner').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.enableDragUnscheduled).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.enableDragUnscheduled = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Adaptive rescheduling suggestions').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.enableAdaptiveRescheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.enableAdaptiveRescheduling = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Goal-aware adaptive priorities').setDesc('Use active goal priority and deadlines when ranking suggested planning slots.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.goalAwareScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.goalAwareScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Planning conflict badges').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showPlanningBadges).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showPlanningBadges = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Planner snap minutes').addDropdown((dropdown: any) => { [5, 10, 15, 30].forEach((v: number) => dropdown.addOption(String(v), `${v} minutes`)); dropdown.setValue(String(this.plugin.settings.planningPreferences.slotMinutes)); dropdown.onChange(async (value: string) => { this.plugin.settings.planningPreferences.slotMinutes = Number(value) || 15; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text: any) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange(async (value: string) => { const parts = value.split(/[–-]/); const start = parts[0]; const end = parts[1]; if (start !== undefined && end !== undefined) { this.plugin.settings.planningPreferences.quietHoursStart = start.trim(); this.plugin.settings.planningPreferences.quietHoursEnd = end.trim(); await this.plugin.saveData(this.plugin.settings); } }));
+    new Setting(containerEl).setName('Daily notes folder').addText((text) => text.setValue(this.plugin.settings.dailyNotesFolder).onChange((value) => save(() => { this.plugin.settings.dailyNotesFolder = value.trim() || DEFAULT_SETTINGS.dailyNotesFolder; })));
+    new Setting(containerEl).setName('Export/review folder').addText((text) => text.setValue(this.plugin.settings.dashboardNoteFolder).onChange((value) => save(() => { this.plugin.settings.dashboardNoteFolder = value.trim() || DEFAULT_SETTINGS.dashboardNoteFolder; })));
+    new Setting(containerEl).setName('Reports folder').addText((text) => text.setValue(this.plugin.settings.reportFolder).onChange((value) => save(() => { this.plugin.settings.reportFolder = value.trim() || DEFAULT_SETTINGS.reportFolder; })));
+    new Setting(containerEl).setName('Automatic prayer-time calculation').setDesc('Calculate prayer times from date, latitude, longitude, method and madhab. Turn off to use manual default times.').addToggle((toggle) => toggle.setValue(this.plugin.settings.prayerCalculation.enabled).onChange((value) => save(() => { this.plugin.settings.prayerCalculation.enabled = value; })));
+    new Setting(containerEl).setName('Prayer latitude').addText((text) => text.setValue(String(this.plugin.settings.prayerCalculation.latitude)).onChange((value) => save(() => { const n = Number(value); if (Number.isFinite(n)) this.plugin.settings.prayerCalculation.latitude = n; })));
+    new Setting(containerEl).setName('Prayer longitude').addText((text) => text.setValue(String(this.plugin.settings.prayerCalculation.longitude)).onChange((value) => save(() => { const n = Number(value); if (Number.isFinite(n)) this.plugin.settings.prayerCalculation.longitude = n; })));
+    new Setting(containerEl).setName('Prayer calculation method').addDropdown((dropdown) => { ['karachi','mwl','isna','egyptian','tehran','jafari'].forEach((v) => dropdown.addOption(v, v.toUpperCase())); dropdown.setValue(this.plugin.settings.prayerCalculation.method).onChange((value) => save(() => { this.plugin.settings.prayerCalculation.method = toPrayerCalculationMethod(value); })); });
+    new Setting(containerEl).setName('Asr madhab').addDropdown((dropdown) => { dropdown.addOption('hanafi','Hanafi'); dropdown.addOption('shafii','Shafi / standard'); dropdown.setValue(this.plugin.settings.prayerCalculation.madhab).onChange((value) => save(() => { this.plugin.settings.prayerCalculation.madhab = toAsrMadhab(value); })); });
+    new Setting(containerEl).setName('Prayer minute adjustment').setDesc('Add/subtract minutes from calculated times.').addText((text) => text.setValue(String(this.plugin.settings.prayerCalculation.minuteAdjustment)).onChange((value) => save(() => { const n = Number(value); if (Number.isFinite(n)) this.plugin.settings.prayerCalculation.minuteAdjustment = Math.trunc(n); })));
+    new Setting(containerEl).setName('Default prayer times').setHeading();
+    Object.entries(this.plugin.settings.defaultPrayerTimes).forEach(([name, currentValue]) => new Setting(containerEl).setName(name).addText((text) => text.setValue(currentValue).onChange((value) => save(() => { this.plugin.settings.defaultPrayerTimes[name as keyof typeof this.plugin.settings.defaultPrayerTimes] = value; }))));
+    new Setting(containerEl).setName('Habits').setHeading();
+    this.plugin.settings.habits.forEach((habit) => new Setting(containerEl).setName(`${habit.icon} ${habit.name} · ${habit.type}`).addToggle((toggle) => toggle.setValue(habit.enabled).onChange((value) => save(() => { habit.enabled = value; }))));
+    new Setting(containerEl).setName('Food categories').setDesc('Comma-separated preset categories.').addText((text) => text.setValue(this.plugin.settings.enabledFoodPresetCategories.join(', ')).onChange((value) => save(() => { this.plugin.settings.enabledFoodPresetCategories = value.split(',').map((v) => v.trim()).filter(Boolean); })));
+    new Setting(containerEl).setName('Intelligent scheduling').setDesc('Turn the planning assistant on/off.').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.intelligentScheduling).onChange((value) => save(() => { this.plugin.settings.planningPreferences.intelligentScheduling = value; })));
+    new Setting(containerEl).setName('Show free-time discovery').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.showFreeTime).onChange((value) => save(() => { this.plugin.settings.planningPreferences.showFreeTime = value; })));
+    new Setting(containerEl).setName('Conflict suggestions').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.showConflictSuggestions).onChange((value) => save(() => { this.plugin.settings.planningPreferences.showConflictSuggestions = value; })));
+    new Setting(containerEl).setName('Drag unscheduled tasks/study into planner').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.enableDragUnscheduled).onChange((value) => save(() => { this.plugin.settings.planningPreferences.enableDragUnscheduled = value; })));
+    new Setting(containerEl).setName('Adaptive rescheduling suggestions').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.enableAdaptiveRescheduling).onChange((value) => save(() => { this.plugin.settings.planningPreferences.enableAdaptiveRescheduling = value; })));
+    new Setting(containerEl).setName('Goal-aware adaptive priorities').setDesc('Use active goal priority and deadlines when ranking suggested planning slots.').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.goalAwareScheduling).onChange((value) => save(() => { this.plugin.settings.planningPreferences.goalAwareScheduling = value; })));
+    new Setting(containerEl).setName('Planning conflict badges').addToggle((toggle) => toggle.setValue(this.plugin.settings.planningPreferences.showPlanningBadges).onChange((value) => save(() => { this.plugin.settings.planningPreferences.showPlanningBadges = value; })));
+    new Setting(containerEl).setName('Planner snap minutes').addDropdown((dropdown) => { [5, 10, 15, 30].forEach((v) => dropdown.addOption(String(v), `${v} minutes`)); dropdown.setValue(String(this.plugin.settings.planningPreferences.slotMinutes)).onChange((value) => save(() => { this.plugin.settings.planningPreferences.slotMinutes = Number(value) || 15; })); });
+    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange((value) => { const parts = value.split(/[–-]/); const start = parts[0]; const end = parts[1]; if (start !== undefined && end !== undefined) save(() => { this.plugin.settings.planningPreferences.quietHoursStart = start.trim(); this.plugin.settings.planningPreferences.quietHoursEnd = end.trim(); }); }));
     new Setting(containerEl).setName('Performance & mobile optimization').setHeading();
-    new Setting(containerEl).setName('Analytics cache').setDesc('Keep parsed daily records in memory to avoid repeated vault reads.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.performance.cacheEnabled).onChange(async (value: boolean) => { this.plugin.settings.performance.cacheEnabled = value; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Cache TTL (minutes)').addText((text: any) => text.setValue(String(this.plugin.settings.performance.cacheTtlMinutes)).onChange(async (value: string) => { const n = Math.min(1440, Math.max(1, Number(value) || 10)); this.plugin.settings.performance.cacheTtlMinutes = n; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Maximum cached daily records').setDesc('Lower values reduce RAM usage on phones.').addText((text: any) => text.setValue(String(this.plugin.settings.performance.maxCachedDays)).onChange(async (value: string) => { const n = Math.min(5000, Math.max(50, Number(value) || 500)); this.plugin.settings.performance.maxCachedDays = n; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Analytics lookback').setDesc('Default statistics window for detailed analytics.').addDropdown((dropdown: any) => { [30, 60, 90, 180, 365].forEach((n) => dropdown.addOption(String(n), `${n} days`)); dropdown.setValue(String(this.plugin.settings.performance.analyticsLookbackDays)); dropdown.onChange(async (value: string) => { this.plugin.settings.performance.analyticsLookbackDays = Number(value) || 90; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Lazy analytics UI').setDesc('Render expensive analytics only after the statistics view is opened.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.performance.lazyRenderAnalytics).onChange(async (value: boolean) => { this.plugin.settings.performance.lazyRenderAnalytics = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Analytics cache').setDesc('Keep parsed daily records in memory to avoid repeated vault reads.').addToggle((toggle) => toggle.setValue(this.plugin.settings.performance.cacheEnabled).onChange((value) => save(() => { this.plugin.settings.performance.cacheEnabled = value; invalidateLifeOSCache(); })));
+    new Setting(containerEl).setName('Cache TTL (minutes)').addText((text) => text.setValue(String(this.plugin.settings.performance.cacheTtlMinutes)).onChange((value) => save(() => { this.plugin.settings.performance.cacheTtlMinutes = Math.min(1440, Math.max(1, Number(value) || 10)); })));
+    new Setting(containerEl).setName('Maximum cached daily records').setDesc('Lower values reduce RAM usage on phones.').addText((text) => text.setValue(String(this.plugin.settings.performance.maxCachedDays)).onChange((value) => save(() => { this.plugin.settings.performance.maxCachedDays = Math.min(5000, Math.max(50, Number(value) || 500)); invalidateLifeOSCache(); })));
+    new Setting(containerEl).setName('Analytics lookback').setDesc('Default statistics window for detailed analytics.').addDropdown((dropdown) => { [30, 60, 90, 180, 365].forEach((n) => dropdown.addOption(String(n), `${n} days`)); dropdown.setValue(String(this.plugin.settings.performance.analyticsLookbackDays)).onChange((value) => save(() => { this.plugin.settings.performance.analyticsLookbackDays = Number(value) || 90; })); });
+    new Setting(containerEl).setName('Lazy analytics UI').setDesc('Render expensive analytics only after the statistics view is opened.').addToggle((toggle) => toggle.setValue(this.plugin.settings.performance.lazyRenderAnalytics).onChange((value) => save(() => { this.plugin.settings.performance.lazyRenderAnalytics = value; })));
     new Setting(containerEl).setName('Native integration helpers').setHeading();
     new Setting(containerEl).setName('Tasks metadata guide').setDesc('Use the command palette to copy a Life OS metadata example for Tasks-style Markdown.');
     new Setting(containerEl).setName('Dataview queries').setDesc('Use the command palette to copy ready-made Life OS Dataview queries.');
     new Setting(containerEl).setName('Templater template').setDesc('Use the command palette to copy the Life OS daily template.');
     const integrationStatus = buildIntegrationSnapshot(this.app, this.plugin.settings, []);
     new Setting(containerEl).setName('Integration status').setDesc(`Tasks: ${integrationStatus.tasksPluginDetected ? 'detected' : 'not detected'} · Dataview: ${integrationStatus.dataviewDetected ? 'detected' : 'not detected'} · Templater: ${integrationStatus.templaterDetected ? 'detected' : 'not detected'}`);
-    new Setting(containerEl).setName('Use Tasks integration').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.tasks).onChange(async (value: boolean) => { this.plugin.settings.integrations.tasks = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Use Dataview helpers').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.dataview).onChange(async (value: boolean) => { this.plugin.settings.integrations.dataview = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Use Templater helpers').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.templater).onChange(async (value: boolean) => { this.plugin.settings.integrations.templater = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Automatic task import').setDesc('Off by default for performance. When enabled, task imports should be run deliberately from the command palette.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.integrations.autoImportTasks).onChange(async (value: boolean) => { this.plugin.settings.integrations.autoImportTasks = value; await this.plugin.saveData(this.plugin.settings); }));
+    new Setting(containerEl).setName('Use Tasks integration').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.tasks).onChange((value) => save(() => { this.plugin.settings.integrations.tasks = value; })));
+    new Setting(containerEl).setName('Use Dataview helpers').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.dataview).onChange((value) => save(() => { this.plugin.settings.integrations.dataview = value; })));
+    new Setting(containerEl).setName('Use Templater helpers').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.templater).onChange((value) => save(() => { this.plugin.settings.integrations.templater = value; })));
+    new Setting(containerEl).setName('Automatic task import').setDesc('Off by default for performance. When enabled, task imports should be run deliberately from the command palette.').addToggle((toggle) => toggle.setValue(this.plugin.settings.integrations.autoImportTasks).onChange((value) => save(() => { this.plugin.settings.integrations.autoImportTasks = value; })));
     new Setting(containerEl).setName('Migration safety').setHeading();
-    new Setting(containerEl).setName('Create migration backups').setDesc('Keep the original daily note before a migration changes it.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.migration.createBackups).onChange(async (value: boolean) => { this.plugin.settings.migration.createBackups = value; await this.plugin.saveData(this.plugin.settings); }));
-    new Setting(containerEl).setName('Restore default habits').addButton((button: any) => button.setButtonText('Restore').onClick(async () => { this.plugin.settings.habits = DEFAULT_HABITS.map((habit) => ({ ...habit, subtasks: habit.subtasks ? [...habit.subtasks] : undefined })); await this.plugin.saveData(this.plugin.settings); this.display(); new Notice('Default habits restored'); }));
+    new Setting(containerEl).setName('Create migration backups').setDesc('Keep the original daily note before a migration changes it.').addToggle((toggle) => toggle.setValue(this.plugin.settings.migration.createBackups).onChange((value) => save(() => { this.plugin.settings.migration.createBackups = value; })));
+    new Setting(containerEl).setName('Restore default habits').addButton((button) => button.setButtonText('Restore').onClick(() => save(() => { this.plugin.settings.habits = DEFAULT_HABITS.map((habit) => ({ ...habit, subtasks: habit.subtasks ? [...habit.subtasks] : undefined })); }, true)));
   }
+
 }
+
+/* eslint-enable @typescript-eslint/no-unsafe-member-access */
+/* eslint-enable @typescript-eslint/no-unsafe-call */
+/* eslint-enable @typescript-eslint/no-unsafe-return */
+/* eslint-enable @typescript-eslint/no-unsafe-assignment */
 
 
 async function copyText(value: string, successMessage: string): Promise<void> {
@@ -1154,10 +1163,9 @@ async function copyText(value: string, successMessage: string): Promise<void> {
       new Notice(successMessage);
       return;
     }
-    const textarea = document.createElement('textarea');
+    const textarea = document.body.createEl('textarea', { cls: 'life-os-clipboard-fallback' });
     textarea.value = value;
-    textarea.style.position = 'fixed'; textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
+    
     textarea.select();
     const copied = document.execCommand('copy');
     textarea.remove();
@@ -1165,6 +1173,35 @@ async function copyText(value: string, successMessage: string): Promise<void> {
   } catch {
     new Notice('Clipboard access is unavailable on this device.');
   }
+}
+
+
+function toPartialSettings(value: unknown): Partial<LifeOSSettings> | null {
+  return isRecord(value) ? (value as Partial<LifeOSSettings>) : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isTimelineType(value: string): value is TimelineEntry['type'] {
+  return ['task', 'habit', 'study', 'exercise', 'meal', 'prayer', 'rest', 'other'].includes(value);
+}
+
+function toPriority(value: string): import('./types').Priority {
+  return value === 'critical' || value === 'high' || value === 'medium' ? value : 'low';
+}
+
+function toPrayerCalculationMethod(value: string): import('./types').PrayerCalculationMethod {
+  return ['karachi', 'mwl', 'isna', 'egyptian', 'tehran', 'jafari'].includes(value) ? value as import('./types').PrayerCalculationMethod : 'karachi';
+}
+
+function toAsrMadhab(value: string): import('./types').AsrMadhab {
+  return value === 'hanafi' ? 'hanafi' : 'shafii';
+}
+
+function toGoalMetric(value: string): import('./types').GoalMetric {
+  return ['manual', 'task-completion', 'habit-consistency', 'study-minutes', 'exercise-minutes', 'prayer-completion'].includes(value) ? value as import('./types').GoalMetric : 'manual';
 }
 
 function defaultHabitEntry(habit: HabitDefinition): HabitEntry { if (habit.type === 'subtasks') return { value: (habit.subtasks ?? []).map(() => 0) }; return { value: habit.type === 'boolean' ? false : 0 }; }
@@ -1187,3 +1224,6 @@ function shiftDate(date: string, deltaDays: number): string { const d = new Date
 function formatDay(date: string): string { return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); }
 function habitEntryHasActivity(entry: HabitEntry): boolean { return Array.isArray(entry.value) ? entry.value.some((value) => Number(value) > 0) : Boolean(entry.value); }
 function habitDoneForRecord(habit: HabitDefinition, entry?: HabitEntry): boolean { if (!entry) return false; if (habit.type === 'boolean') return Boolean(entry.value); if (habit.type === 'subtasks') return Array.isArray(entry.value) && entry.value.some((v) => Number(v) > 0); if (habit.target !== undefined) return Number(entry.value) >= habit.target; return Number(entry.value) > 0; }
+
+/* eslint-enable @typescript-eslint/no-unnecessary-type-assertion */
+/* eslint-enable @typescript-eslint/no-misused-promises */

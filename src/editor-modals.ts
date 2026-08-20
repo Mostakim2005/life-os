@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-misused-promises */
+/* eslint-disable @typescript-eslint/no-misused-promises -- Modal save actions launch asynchronous plugin persistence from void-returning Obsidian button callbacks. */
 import { App, Modal, Setting } from 'obsidian';
 import { ExerciseEntry, MealEntry } from './types';
 
@@ -27,7 +27,7 @@ class ExerciseEditorModal extends Modal {
     new Setting(contentEl).setName('Reps').addText((text) => text.setValue(String(this.value.reps ?? '')).onChange((v) => { this.value.reps = v.trim() ? Math.max(0, Math.floor(Number(v) || 0)) : undefined; }));
     new Setting(contentEl).setName('Load (kg)').addText((text) => text.setValue(String(this.value.loadKg ?? '')).onChange((v) => { this.value.loadKg = v.trim() ? Math.max(0, Number(v) || 0) : undefined; }));
     new Setting(contentEl).setName('Distance (km)').addText((text) => text.setValue(String(this.value.distanceKm ?? '')).onChange((v) => { this.value.distanceKm = v.trim() ? Math.max(0, Number(v) || 0) : undefined; }));
-    new Setting(contentEl).setName('Intensity / rpe').addText((text) => text.setValue(String(this.value.intensity ?? '')).onChange((v) => { this.value.intensity = v.trim() ? Math.min(10, Math.max(0, Number(v) || 0)) : undefined; }));
+    new Setting(contentEl).setName('Intensity / RPE').addText((text) => text.setValue(String(this.value.intensity ?? '')).onChange((v) => { this.value.intensity = v.trim() ? Math.min(10, Math.max(0, Number(v) || 0)) : undefined; }));
     new Setting(contentEl).setName('Muscle group').addText((text) => text.setValue(this.value.muscleGroup ?? '').onChange((v) => { this.value.muscleGroup = v.trim() || undefined; }));
     new Setting(contentEl).setName('Notes').addTextArea((text) => text.setValue(this.value.note ?? '').onChange((v) => { this.value.note = v.trim() || undefined; }));
     new Setting(contentEl).addButton((button) => button.setButtonText('Cancel').onClick(() => { this.done(null); this.close(); }));
@@ -72,3 +72,5 @@ class MealEditorModal extends Modal {
   }
   onClose(): void { this.contentEl.empty(); }
 }
+
+/* eslint-enable @typescript-eslint/no-misused-promises */
