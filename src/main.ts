@@ -17,7 +17,6 @@ import { invalidateDateIndex, invalidateLifeOSCache } from './performance';
 import { migrateSettings } from './schema';
 import { lifeOSDataviewQuery, lifeOSDataviewSummaryQuery, lifeOSTemplaterTemplate, tasksMetadataGuide } from './integration-helpers';
 import { migrateLegacyDailyNotes } from './migrations';
-import { LIFE_OS_CSS } from './styles';
 import { editExercise, editMeal } from './editor-modals';
 
 const VIEW_TYPE = 'life-os-dashboard';
@@ -630,7 +629,8 @@ class LifeOSView extends ItemView {
       column.addEventListener('dragover', (event) => { if (this.plugin.settings.planningPreferences.enableDragUnscheduled) event.preventDefault(); });
       column.addEventListener('drop', (event) => { event.preventDefault(); void this.dropUnscheduledOnPlanner(event, column, date); });
       const generated = generatedEntries(this.plugin.settings, date);
-      const entries = [...this.currentWeekRecords[date].timeline, ...generated];
+      const dayRecord = this.currentWeekRecords[date];
+      const entries = [...(dayRecord?.timeline ?? []), ...generated];
       const conflicts = getConflicts(entries);
       if (conflicts.length && this.plugin.settings.planningPreferences.showPlanningBadges) {
         const badge = column.createDiv({ cls: 'life-os-conflict-badge', text: `⚠ ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}` });
@@ -1089,11 +1089,7 @@ class LifeOSView extends ItemView {
   async persist(notice: boolean): Promise<void> { this.record.updatedAt = new Date().toISOString(); await saveRecord(this.app, this.record, this.plugin.settings); if (notice) new Notice('Life OS saved'); }
 
   injectStyles(): void {
-    if (document.getElementById('life-os-styles')) return;
-    const style = document.createElement('style'); style.id = 'life-os-styles';
-    style.textContent = LIFE_OS_CSS;
-    /* Legacy inline stylesheet removed in v0.10; styles live in src/styles.ts. */
-    document.head.appendChild(style);
+    // Obsidian loads styles.css automatically; no runtime stylesheet injection needed.
   }
 }
 
@@ -1127,7 +1123,7 @@ class LifeOSSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Goal-aware adaptive priorities').setDesc('Use active goal priority and deadlines when ranking suggested planning slots.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.goalAwareScheduling).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.goalAwareScheduling = value; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Planning conflict badges').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.planningPreferences.showPlanningBadges).onChange(async (value: boolean) => { this.plugin.settings.planningPreferences.showPlanningBadges = value; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Planner snap minutes').addDropdown((dropdown: any) => { [5, 10, 15, 30].forEach((v: number) => dropdown.addOption(String(v), `${v} minutes`)); dropdown.setValue(String(this.plugin.settings.planningPreferences.slotMinutes)); dropdown.onChange(async (value: string) => { this.plugin.settings.planningPreferences.slotMinutes = Number(value) || 15; await this.plugin.saveData(this.plugin.settings); }); });
-    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text: any) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange(async (value: string) => { const parts = value.split(/[–-]/); if (parts.length === 2) { this.plugin.settings.planningPreferences.quietHoursStart = parts[0].trim(); this.plugin.settings.planningPreferences.quietHoursEnd = parts[1].trim(); await this.plugin.saveData(this.plugin.settings); } }));
+    new Setting(containerEl).setName('Quiet hours').setDesc('Used later by adaptive scheduling/reminder logic.').addText((text: any) => text.setValue(`${this.plugin.settings.planningPreferences.quietHoursStart}–${this.plugin.settings.planningPreferences.quietHoursEnd}`).onChange(async (value: string) => { const parts = value.split(/[–-]/); const start = parts[0]; const end = parts[1]; if (start !== undefined && end !== undefined) { this.plugin.settings.planningPreferences.quietHoursStart = start.trim(); this.plugin.settings.planningPreferences.quietHoursEnd = end.trim(); await this.plugin.saveData(this.plugin.settings); } }));
     new Setting(containerEl).setName('Performance & mobile optimization').setHeading();
     new Setting(containerEl).setName('Analytics cache').setDesc('Keep parsed daily records in memory to avoid repeated vault reads.').addToggle((toggle: any) => toggle.setValue(this.plugin.settings.performance.cacheEnabled).onChange(async (value: boolean) => { this.plugin.settings.performance.cacheEnabled = value; invalidateLifeOSCache(); await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Cache TTL (minutes)').addText((text: any) => text.setValue(String(this.plugin.settings.performance.cacheTtlMinutes)).onChange(async (value: string) => { const n = Math.min(1440, Math.max(1, Number(value) || 10)); this.plugin.settings.performance.cacheTtlMinutes = n; await this.plugin.saveData(this.plugin.settings); }));
