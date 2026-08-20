@@ -630,7 +630,8 @@ class LifeOSView extends ItemView {
       column.addEventListener('dragover', (event) => { if (this.plugin.settings.planningPreferences.enableDragUnscheduled) event.preventDefault(); });
       column.addEventListener('drop', (event) => { event.preventDefault(); void this.dropUnscheduledOnPlanner(event, column, date); });
       const generated = generatedEntries(this.plugin.settings, date);
-      const entries = [...this.currentWeekRecords[date].timeline, ...generated];
+      const dayRecord = this.currentWeekRecords[date];
+      const entries = [...(dayRecord?.timeline ?? []), ...generated];
       const conflicts = getConflicts(entries);
       if (conflicts.length && this.plugin.settings.planningPreferences.showPlanningBadges) {
         const badge = column.createDiv({ cls: 'life-os-conflict-badge', text: `⚠ ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}` });
@@ -1113,7 +1114,7 @@ class LifeOSSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Prayer minute adjustment').setDesc('Add/subtract minutes from calculated times.').addText((text: any) => text.setValue(String(this.plugin.settings.prayerCalculation.minuteAdjustment)).onChange(async (value: string) => { this.plugin.settings.prayerCalculation.minuteAdjustment = Number(value) || 0; await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Prayer & integration features').setHeading();
     new Setting(containerEl).setName('Default prayer times').setDesc('Copied into newly-created daily records when automatic calculation is disabled.');
-    Object.keys(this.plugin.settings.defaultPrayerTimes).forEach((name) => new Setting(containerEl).setName(name).addText((text: any) => text.setValue(this.plugin.settings.defaultPrayerTimes[name] ?? '').onChange(async (value: string) => { this.plugin.settings.defaultPrayerTimes[name] = value; await this.plugin.saveData(this.plugin.settings); })));
+    Object.entries(this.plugin.settings.defaultPrayerTimes).forEach(([name, currentValue]) => new Setting(containerEl).setName(name).addText((text: any) => text.setValue(currentValue).onChange(async (value: string) => { this.plugin.settings.defaultPrayerTimes[name] = value; await this.plugin.saveData(this.plugin.settings); })));
     new Setting(containerEl).setName('Study subjects').setDesc('Comma-separated preset subjects.').addText((text: any) => text.setValue(this.plugin.settings.defaultStudySubjects.join(', ')).onChange(async (value: string) => { this.plugin.settings.defaultStudySubjects = value.split(',').map((v: string) => v.trim()).filter(Boolean); await this.plugin.saveData(this.plugin.settings); }));
     new Setting(containerEl).setName('Habits').setDesc('Enable or disable starter habits.').setHeading();
     this.plugin.settings.habits.forEach((habit) => new Setting(containerEl).setName(`${habit.icon} ${habit.name} · ${habit.type}`).addToggle((toggle: any) => toggle.setValue(habit.enabled).onChange(async (value: boolean) => { habit.enabled = value; await this.plugin.saveData(this.plugin.settings); })));
