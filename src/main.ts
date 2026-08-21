@@ -746,7 +746,8 @@ class LifeOSView extends ItemView {
       document.body.classList.remove('life-os-planner-dragging');
       const sourceDate = date;
       const targetNode = document.elementFromPoint(event.clientX, event.clientY);
-      const targetEl = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') : null;
+      const targetCandidate = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') : null;
+      const targetEl = targetCandidate instanceof HTMLElement ? targetCandidate : null;
       const targetDate = targetEl?.dataset.date ?? sourceDate;
       const sourceRecord = (await loadRecord(this.app, sourceDate, this.plugin.settings)) ?? makeEmptyRecord(sourceDate, this.plugin.settings);
       const ruleGenerated = item.id.startsWith('rule:');
