@@ -746,8 +746,7 @@ class LifeOSView extends ItemView {
       document.body.classList.remove('life-os-planner-dragging');
       const sourceDate = date;
       const targetNode = document.elementFromPoint(event.clientX, event.clientY);
-      const targetCandidate = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') : null;
-      const targetEl = targetCandidate instanceof HTMLElement ? targetCandidate : null;
+      const targetEl = targetNode instanceof HTMLElement ? targetNode.closest('.life-os-week-day') : null;
       const targetDate = targetEl?.dataset.date ?? sourceDate;
       const sourceRecord = (await loadRecord(this.app, sourceDate, this.plugin.settings)) ?? makeEmptyRecord(sourceDate, this.plugin.settings);
       const ruleGenerated = item.id.startsWith('rule:');
@@ -1088,10 +1087,6 @@ class LifeOSView extends ItemView {
 
 }
 
-/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Obsidian Setting component callbacks are typed through the installed API boundary; values are validated before persistence. */
-/* eslint-disable @typescript-eslint/no-unsafe-return -- Settings callbacks return Obsidian component builders whose API is provided by the host. */
-/* eslint-disable @typescript-eslint/no-unsafe-call -- Settings controls are constructed through the Obsidian host UI API. */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access -- Settings controls are accessed through the Obsidian host UI API. */
 class LifeOSSettingTab extends PluginSettingTab {
   plugin: LifeOSPlugin;
   constructor(app: import('obsidian').App, plugin: LifeOSPlugin) { super(app, plugin); this.plugin = plugin; }
@@ -1151,10 +1146,6 @@ class LifeOSSettingTab extends PluginSettingTab {
 
 }
 
-/* eslint-enable @typescript-eslint/no-unsafe-member-access */
-/* eslint-enable @typescript-eslint/no-unsafe-call */
-/* eslint-enable @typescript-eslint/no-unsafe-return */
-/* eslint-enable @typescript-eslint/no-unsafe-assignment */
 
 
 async function copyText(value: string, successMessage: string): Promise<void> {
@@ -1226,5 +1217,5 @@ function formatDay(date: string): string { return new Date(`${date}T12:00:00`).t
 function habitEntryHasActivity(entry: HabitEntry): boolean { return Array.isArray(entry.value) ? entry.value.some((value) => Number(value) > 0) : Boolean(entry.value); }
 function habitDoneForRecord(habit: HabitDefinition, entry?: HabitEntry): boolean { if (!entry) return false; if (habit.type === 'boolean') return Boolean(entry.value); if (habit.type === 'subtasks') return Array.isArray(entry.value) && entry.value.some((v) => Number(v) > 0); if (habit.target !== undefined) return Number(entry.value) >= habit.target; return Number(entry.value) > 0; }
 
-/* eslint-enable @typescript-eslint/no-unnecessary-type-assertion */
-/* eslint-enable @typescript-eslint/no-misused-promises */
+/* eslint-enable @typescript-eslint/no-unnecessary-type-assertion -- Re-enable the assertion rule after the intentionally narrowed UI region. */
+/* eslint-enable @typescript-eslint/no-misused-promises -- Re-enable the async-handler rule after the UI event region. */

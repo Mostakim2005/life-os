@@ -73,4 +73,4 @@ class MealEditorModal extends Modal {
   onClose(): void { this.contentEl.empty(); }
 }
 
-/* eslint-enable @typescript-eslint/no-misused-promises */
+/* eslint-enable @typescript-eslint/no-misused-promises -- Re-enable the async-handler rule after the modal callback region. */

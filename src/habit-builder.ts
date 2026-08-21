@@ -117,4 +117,4 @@ function syncHabitRule(plugin: LifeOSPlugin, habit: HabitDefinition): void {
   if (!existing) plugin.settings.planningRules.push(next);
 }
 
-/* eslint-enable @typescript-eslint/no-misused-promises */
+/* eslint-enable @typescript-eslint/no-misused-promises -- Re-enable the async-handler rule after the habit-builder callback region. */
