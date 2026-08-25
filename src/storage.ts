@@ -3,6 +3,10 @@ import { DEFAULT_HABITS } from './presets';
 import { DailyRecord, LifeOSSettings } from './types';
 import { isIsoDate, sanitizeDailyRecord } from './record-validation';
 
+function isPartialDailyRecord(value: unknown): value is Partial<DailyRecord> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export const CURRENT_SCHEMA_VERSION = 3;
 
 export const DEFAULT_SETTINGS: LifeOSSettings = {
