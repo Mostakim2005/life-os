@@ -1,4 +1,4 @@
-// Life OS — faithful types from live Nihon 1.3.0 bundle (3329 lines)
+﻿// Life OS
 export interface LifeOSSettings {
   dailyNotesFolder: string;
   prayerEnabled: boolean;
@@ -19,3 +19,4 @@ export interface DailyRecord {
   study?: Record<string, unknown>;
   habits?: Record<string, unknown>;
 }
+
