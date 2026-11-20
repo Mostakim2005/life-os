@@ -131,7 +131,7 @@ class LifeOSSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Life OS v2 Settings (adhan-js + DD-MM-YYYY)" });
+    new Setting(containerEl).setName("Life OS v2 Settings (adhan-js + DD-MM-YYYY)").setHeading();
 
     const eco = detectObsidianEcosystem(this.app);
     containerEl.createEl("p", {
