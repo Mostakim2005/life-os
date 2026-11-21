@@ -13,6 +13,7 @@ import {
   writeSuperProductivityExport,
 } from "./interop/inbox-reconciler";
 import { LifeOSCockpitView, VIEW_TYPE_LIFE_OS } from "./views";
+import { ConfirmModal } from "./ui/confirm-modal";
 
 export default class LifeOSPlugin extends Plugin {
   settings!: LifeOSSettings;
@@ -63,7 +64,16 @@ export default class LifeOSPlugin extends Plugin {
     this.addCommand({
       id: "migrate-dates-to-dmy",
       name: "Migrate legacy daily notes to DD-MM-YYYY",
-      callback: async () => this.migrateLegacyDateFilenames(),
+      callback: () => {
+        new ConfirmModal(this.app, {
+          title: "Migrate legacy daily notes to DD-MM-YYYY?",
+          message: "This will rename matching YYYY-MM-DD daily notes in your configured folder to DD-MM-YYYY.",
+          confirmLabel: "Run migration",
+          destructive: true,
+          cssPrefix: "lifeos",
+          onConfirm: () => this.migrateLegacyDateFilenames(),
+        }).open();
+      },
     });
 
     this.addCommand({
@@ -117,6 +127,20 @@ export default class LifeOSPlugin extends Plugin {
           if (count > 0) new Notice(`Life OS synced ${count} companion event(s).`);
         }
       );
+    });
+
+    const statusEl = this.addStatusBarItem();
+    statusEl.addClass("lifeos-status-pill");
+    statusEl.setText("Life OS: Cockpit");
+    statusEl.setAttribute("role", "button");
+    statusEl.setAttribute("tabindex", "0");
+    statusEl.setAttribute("aria-label", "Open Life OS Cockpit");
+    statusEl.addEventListener("click", () => void this.activateCockpitView());
+    statusEl.addEventListener("keydown", (evt: KeyboardEvent) => {
+      if (evt.key === "Enter" || evt.key === " ") {
+        evt.preventDefault();
+        void this.activateCockpitView();
+      }
     });
 
     this.addSettingTab(new LifeOSSettingTab(this.app, this));

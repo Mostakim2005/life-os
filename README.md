@@ -1,18 +1,32 @@
 # Life OS
 
-> [!NOTE]
-> **Live Plug-and-Play Runtime Available**: The `runtime/` directory contains the production-tested JavaScript bundle (`main.js`, `manifest.json`, and `styles.css`) running directly in the live Obsidian vault. While the TypeScript codebase (`src/`) is undergoing reverse-engineering for official Obsidian community plugin standards, the files in `runtime/` can be copied directly into your vault's `.obsidian/plugins/life-os/` for immediate plug-and-play use.
+All-in-one full-window Obsidian cockpit for daily habits, sleep and hydration vitals, prayers, tasks, and offline analytics.
 
-High-density personal cockpit for prayer, sleep, water, exercise, study, tasks, and habits with companion plugin interoperability.
+## UI/UX Surface Inventory
 
-Target version: `v1.3.0`. This repo is being reverse-engineered from the live bundled JS back to Obsidian-standard TypeScript.
+| Surface | Implementation |
+| :--- | :--- |
+| **Ribbon Icon** | Dashboard icon (`Open cockpit`) opening the auto-pinned `LifeOSCockpitView`. |
+| **Workspace View** | Full-window `LifeOSCockpitView` (`ItemView`) with close-protection pinning. |
+| **Status Bar** | Clickable `Life OS: Cockpit` pill to focus or open the cockpit view. |
+| **Safety Modals** | `ConfirmModal` guarding bulk legacy daily-note filename migrations. |
+| **Settings Tab** | `LifeOSSettingTab` covering storage mode, hydration unit, prayer settings, and exports. |
+
+## Documentation
+
+- `docs/PRODUCT.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS_AND_TRAPS.md`
+- `docs/VISUAL_LOG.md`
+- `AGENTS.md`
 
 ## Develop
 
-- `npm i` (Node 18+), `npm run dev`, `npm run build` -> `main.js`
-
-Manual install: copy `main.js`, `manifest.json`, `styles.css` to `<Vault>/.obsidian/plugins/life-os/`.
+```bash
+npm install
+npm run build
+```
 
 ## License
 
-Code: PolyForm Noncommercial 1.0.0 (see `LICENSE`). Docs: CC BY-NC 4.0. Copyright (c) Mostakim2005. Source-available: free non-commercial use with credit, no commercial use.
+See `LICENSE`.

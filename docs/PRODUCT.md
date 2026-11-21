@@ -65,3 +65,9 @@
 
 ### [WISHLIST: Wearable-Health-Auto-Sync] | Aliases: google fit sync, sleep data import
 > **1-Line Summary:** Local bridge to import sleep hours and step count from exported health archives.
+
+### [FEATURE: UI-UX-Parity-And-Accessibility] | Aliases: confirm modal, cockpit status bar, focus visible, reduced motion
+> **1-Line Summary:** Adds ConfirmModal confirmation guardrail for irreversible migrations, clickable Cockpit Status Bar pill, and WCAG accessibility compliance.
+* **User Intention (Non-Negotiable):** Protect user daily note data against accidental migration or bulk resets and provide one-click status bar access to LifeOS Cockpit.
+* **Visual / UI Behavior:** Destructive operations prompt a high-contrast modal with confirm/cancel buttons; status bar pill opens the cockpit view.
+* **Code Anchors (Grep Targets):** `src/ui/confirm-modal.ts`, `src/main.ts`, `styles.css`
