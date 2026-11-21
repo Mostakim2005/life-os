@@ -65,7 +65,7 @@ export function renderInteractiveChart(
   canvas.style.width = "100%";
 
   const { textColor, gridColor, fontFamily } = getObsidianThemePalette();
-  const labels = summaries.map((s) => s.label);
+  const labels = summaries.map((s) => s.dateKey.slice(0, 5));
   const data = summaries.map((s) => (s.exists ? options.getValue(s) ?? 0 : 0));
 
   // Base bar dataset
