@@ -712,3 +712,421 @@ body.life-os-glassmorphic .life-os-reflection-input:focus {
   }
 }
 
+
+/* ==========================================================================
+   Life OS v3.0 — Color-Coded Full-Window Cockpit, Controls & Charts
+   ========================================================================== */
+
+.life-os-viewport {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 40px;
+}
+
+.life-os-root {
+  max-width: 1280px;
+  padding: 16px 20px 32px;
+  gap: 14px;
+}
+
+/* Mode Tabs & Segmented Switchers */
+.life-os-mode-tabs,
+.life-os-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.life-os-mode-tab,
+.life-os-seg-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.life-os-mode-tab.is-active,
+.life-os-seg-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.life-os-btn-subtle.is-pinned {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+  font-weight: 600;
+}
+
+/* Vibrant Semantic Module Accents */
+.life-os-accent-sleep {
+  border-top: 3px solid #818cf8 !important;
+}
+.life-os-accent-water {
+  border-top: 3px solid #38bdf8 !important;
+}
+.life-os-accent-prayer {
+  border-top: 3px solid #34d399 !important;
+}
+.life-os-accent-habits {
+  border-top: 3px solid #fbbf24 !important;
+}
+.life-os-accent-tasks {
+  border-top: 3px solid #a78bfa !important;
+}
+.life-os-accent-timeline {
+  border-top: 3px solid #22d3ee !important;
+}
+.life-os-accent-journal {
+  border-top: 3px solid #fb7185 !important;
+}
+
+/* Badges & Pill Rows */
+.life-os-pill-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+.life-os-pill-badge.is-good {
+  background: rgba(52, 211, 153, 0.18);
+  color: #34d399;
+}
+.life-os-pill-badge.is-warn {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+.life-os-pill-badge.is-info {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+}
+.life-os-pill-badge.is-muted {
+  background: var(--background-primary);
+  color: var(--text-muted);
+}
+
+.life-os-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.life-os-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.life-os-range-slider {
+  flex: 1;
+  accent-color: #818cf8;
+  cursor: pointer;
+}
+
+/* Hydration Glasses & Progress Bar */
+.life-os-water-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.life-os-water-readout {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.life-os-muted-text {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.life-os-progress-track {
+  width: 100%;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--background-primary);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.life-os-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.25s ease;
+}
+
+.life-os-fill-water {
+  background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+}
+
+.life-os-glass-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.life-os-glass-btn {
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.life-os-glass-btn.is-filled {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.life-os-glass-btn:hover {
+  transform: translateY(-1px);
+  border-color: #38bdf8;
+}
+
+/* Prayer Strip Pills */
+.life-os-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.life-os-prayer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.life-os-prayer-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.life-os-status-pill {
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.life-os-status-pill.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+
+/* Habits & Quick-Add Bars */
+.life-os-inline-add,
+.life-os-quick-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.life-os-input-compact,
+.life-os-input-flex,
+.life-os-time-input {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+}
+
+.life-os-input-flex {
+  flex: 1;
+  min-width: 140px;
+}
+
+.life-os-habit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.life-os-btn-del {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0 6px;
+}
+
+.life-os-btn-del:hover {
+  color: #f87171;
+}
+
+.life-os-empty-state {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 12px 4px;
+  text-align: center;
+}
+
+/* Calendar Heat Dots */
+.life-os-calendar-card {
+  padding: 16px;
+}
+
+.life-os-cal-day {
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+}
+
+.life-os-cal-dots {
+  display: flex;
+  gap: 4px;
+  min-height: 8px;
+}
+
+.life-os-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-prayer {
+  background: rgba(52, 211, 153, 0.55);
+}
+.dot-prayer.is-full {
+  background: #34d399;
+}
+.dot-sleep {
+  background: #818cf8;
+}
+.dot-water {
+  background: #38bdf8;
+}
+.dot-journal {
+  background: #fb7185;
+}
+
+.life-os-cal-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 0.78rem;
+}
+.legend-prayer { color: #34d399; }
+.legend-sleep { color: #818cf8; }
+.legend-water { color: #38bdf8; }
+.legend-journal { color: #fb7185; }
+
+/* Stats & SVG Charts */
+.life-os-stats-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.life-os-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.life-os-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.life-os-kpi-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.life-os-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.life-os-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 8px;
+}
+
+.life-os-chart-grid {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+}
+
+.life-os-chart-target {
+  stroke: #fbbf24;
+  stroke-width: 1.4;
+  stroke-dasharray: 4 4;
+}
+
+.life-os-chart-axis {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+.life-os-chart-bar.bar-sleep {
+  fill: #818cf8;
+}
+.life-os-chart-bar.bar-water {
+  fill: #38bdf8;
+}
+.life-os-chart-bar.bar-prayer {
+  fill: #34d399;
+}
+
+.life-os-export-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@container lifeOsViewport (max-width: 600px) {
+  .life-os-glass-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
