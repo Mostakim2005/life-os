@@ -1,4 +1,4 @@
-import { App, normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
+import { App, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import { DEFAULT_SETTINGS } from "./settings";
 import type { LifeOSSettings, PrayerMethodKey, StorageMode, WaterUnit } from "./types";
 import { todayDMY, toDMYKey } from "./core/date-format";
@@ -99,6 +99,18 @@ export default class LifeOSPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "run-python-analytics",
+      name: "Generate monthly analytics report (Python)",
+      callback: async () => {
+        if (Platform.isMobile) {
+          new Notice("Python analytics is only available on desktop.");
+          return;
+        }
+        await this.runPythonAnalytics();
+      },
+    });
+
     this.app.workspace.onLayoutReady(() => {
       void reconcileMobileInbox(this.app, this.settings, (dk) => this.ensureNoteForDate(dk)).then(
         (count) => {
@@ -175,6 +187,29 @@ export default class LifeOSPlugin extends Plugin {
       }
     }
     new Notice(`Migrated ${migrated} legacy YYYY-MM-DD note(s) to DD-MM-YYYY.`);
+  }
+
+  async runPythonAnalytics(): Promise<void> {
+    const { execFile } = await import("child_process");
+    const folder = normalizePath(this.settings.dailyNotesFolder || "Life OS");
+    const adapter = this.app.vault.adapter as { getBasePath?: () => string };
+    const basePath = adapter.getBasePath ? adapter.getBasePath() : ".";
+    const scriptPath = normalizePath(`${basePath}/.obsidian/plugins/life-os/scripts/life_os_analytics.py`);
+
+    new Notice("Generating Life OS monthly analytics...");
+    execFile(
+      "python",
+      [scriptPath, "--vault-folder", folder, "--days", "30"],
+      { cwd: basePath },
+      (err, _stdout, stderr) => {
+        if (err) {
+          new Notice(`Analytics failed: ${err.message}`);
+          console.error("Python analytics error:", err, stderr);
+        } else {
+          new Notice(`Analytics generated in ${folder}/exports`);
+        }
+      }
+    );
   }
 
   async loadSettings(): Promise<void> {

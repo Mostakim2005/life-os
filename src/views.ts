@@ -1,4 +1,5 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import type { Chart } from "chart.js";
 import type LifeOSPlugin from "./main";
 import type { ParsedDailyNote, PrayerStatus, TaskPriority, WaterUnit } from "./types";
 import { formatDateDMY, parseAnyDateKey, todayDMY, toISOKey } from "./core/date-format";
@@ -18,8 +19,9 @@ import {
   collectMonthSummaries,
   collectRecentSummaries,
   computeAggregateStats,
-  renderMetricBarChart,
 } from "./core/stats-engine";
+import { renderInteractiveChart } from "./core/chartjs-renderer";
+import { computeNextRecurringDate, parseNaturalLanguageTask } from "./core/task-nlp";
 
 export const VIEW_TYPE_LIFE_OS = "life-os-cockpit-view";
 
@@ -46,6 +48,7 @@ export class LifeOSCockpitView extends ItemView {
   private currentNote: ParsedDailyNote | null = null;
   private saveTimer: number | null = null;
   private countdownTimer: number | null = null;
+  private activeCharts: Chart[] = [];
 
   constructor(leaf: WorkspaceLeaf, plugin: LifeOSPlugin) {
     super(leaf);
@@ -92,6 +95,14 @@ export class LifeOSCockpitView extends ItemView {
       window.clearInterval(this.countdownTimer);
       this.countdownTimer = null;
     }
+    this.destroyActiveCharts();
+  }
+
+  private destroyActiveCharts(): void {
+    for (const c of this.activeCharts) {
+      c.destroy();
+    }
+    this.activeCharts = [];
   }
 
   async setDateKey(dateKey: string): Promise<void> {
@@ -141,6 +152,7 @@ export class LifeOSCockpitView extends ItemView {
   }
 
   async refreshView(): Promise<void> {
+    this.destroyActiveCharts();
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
     container.addClass("life-os-viewport");
@@ -640,14 +652,20 @@ export class LifeOSCockpitView extends ItemView {
 
     const addBtn = addBar.createEl("button", { text: "+ Task", cls: "life-os-btn-primary" });
     const submitTask = (): void => {
-      const title = titleInput.value.trim();
+      const rawTitle = titleInput.value.trim();
+      if (!rawTitle) return;
+
+      const refDate = parseAnyDateKey(this.selectedDateKey) ?? new Date();
+      const { title, dueDateIso, recurrence } = parseNaturalLanguageTask(rawTitle, refDate);
       if (!title) return;
+
       note.tasks.push({
         id: `task-${Date.now()}`,
         title,
         done: false,
         priority: prioSelect.value as TaskPriority,
-        dueDateIso: toISOKey(this.selectedDateKey) ?? undefined,
+        dueDateIso: dueDateIso ?? toISOKey(this.selectedDateKey) ?? undefined,
+        recurrence,
       });
       titleInput.value = "";
       void this.persistCurrentNote(true);
@@ -674,6 +692,29 @@ export class LifeOSCockpitView extends ItemView {
         task.done = cb.checked;
         task.doneDateIso = task.done ? toISOKey(todayDMY()) ?? undefined : undefined;
         void this.persistCurrentNote(true);
+
+        // Regenerate next occurrence if task has recurrence rule
+        if (task.done && task.recurrence) {
+          void (async () => {
+            const baseDate = parseAnyDateKey(this.selectedDateKey) ?? new Date();
+            const nextDate = computeNextRecurringDate(task.recurrence!, baseDate);
+            const nextKey = formatDateDMY(nextDate);
+            const file = await this.plugin.ensureNoteForDate(nextKey);
+            await this.app.vault.process(file, (content) => {
+              const targetNote = parseDailyNote(content, nextKey, this.plugin.settings);
+              targetNote.tasks.push({
+                id: `task-${Date.now()}`,
+                title: task.title,
+                done: false,
+                priority: task.priority,
+                dueDateIso: toISOKey(nextKey) ?? undefined,
+                recurrence: task.recurrence,
+              });
+              return applyParsedNoteToMarkdown(content, targetNote, this.plugin.settings);
+            });
+            new Notice(`Scheduled next recurrence on ${nextKey}`);
+          })();
+        }
       });
 
       const prioIcon =
@@ -681,6 +722,9 @@ export class LifeOSCockpitView extends ItemView {
       if (prioIcon) row.createSpan({ text: prioIcon, cls: "life-os-priority-badge" });
 
       row.createSpan({ text: task.title, cls: "life-os-task-title" });
+      if (task.recurrence) {
+        row.createSpan({ text: `🔁 ${task.recurrence}`, cls: "life-os-task-recurrence" });
+      }
       if (task.dueDateIso) {
         row.createSpan({ text: task.dueDateIso, cls: "life-os-task-due" });
       }
@@ -948,38 +992,47 @@ export class LifeOSCockpitView extends ItemView {
       box.createDiv({ text: k.sub, cls: "life-os-muted-text" });
     }
 
-    // Charts Grid
+    // Charts Grid (Interactive Chart.js Canvases)
     const chartsGrid = root.createDiv({ cls: "life-os-charts-grid" });
 
     const sleepChartCard = chartsGrid.createDiv({ cls: "life-os-card life-os-accent-sleep" });
     sleepChartCard.createDiv({ text: "Sleep Hours Trend (Target Dashed)", cls: "life-os-card-title" });
-    renderMetricBarChart(sleepChartCard, summaries, {
+    const sleepChart = renderInteractiveChart(sleepChartCard, summaries, {
+      label: "Sleep",
+      unit: "h",
       maxValue: 10,
       targetValue: this.plugin.settings.sleepTargetHours,
-      unit: "h",
-      barClass: "bar-sleep",
+      barColor: "rgba(99, 102, 241, 0.75)",
+      targetLineColor: "rgba(245, 158, 11, 0.9)",
       getValue: (d) => d.sleepHours,
     });
+    this.activeCharts.push(sleepChart);
 
     const waterChartCard = chartsGrid.createDiv({ cls: "life-os-card life-os-accent-water" });
     waterChartCard.createDiv({ text: "Hydration Trend (Liters)", cls: "life-os-card-title" });
-    renderMetricBarChart(waterChartCard, summaries, {
+    const waterChart = renderInteractiveChart(waterChartCard, summaries, {
+      label: "Hydration",
+      unit: "L",
       maxValue: Math.max(4, this.plugin.settings.waterTargetLiters + 1.5),
       targetValue: this.plugin.settings.waterTargetLiters,
-      unit: "L",
-      barClass: "bar-water",
+      barColor: "rgba(6, 182, 212, 0.75)",
+      targetLineColor: "rgba(245, 158, 11, 0.9)",
       getValue: (d) => (d.exists ? d.waterLiters : null),
     });
+    this.activeCharts.push(waterChart);
 
     const prayerChartCard = chartsGrid.createDiv({ cls: "life-os-card life-os-accent-prayer" });
     prayerChartCard.createDiv({ text: "Daily Prayers Completed (0–5)", cls: "life-os-card-title" });
-    renderMetricBarChart(prayerChartCard, summaries, {
+    const prayerChart = renderInteractiveChart(prayerChartCard, summaries, {
+      label: "Prayers Done",
+      unit: "/5",
       maxValue: 5,
       targetValue: 5,
-      unit: "/5",
-      barClass: "bar-prayer",
+      barColor: "rgba(16, 185, 129, 0.75)",
+      targetLineColor: "rgba(245, 158, 11, 0.9)",
       getValue: (d) => (d.exists ? d.prayersDone : null),
     });
+    this.activeCharts.push(prayerChart);
 
     // Quick Export Footer
     const exportRow = root.createDiv({ cls: "life-os-card life-os-export-row" });

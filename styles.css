@@ -1130,3 +1130,17 @@ body.life-os-glassmorphic .life-os-reflection-input:focus {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+/* v3.0 Interactive Chart.js & Recurrence Badges */
+.life-os-task-recurrence {
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.life-os-chart-canvas {
+  width: 100% !important;
+  max-height: 165px;
+}

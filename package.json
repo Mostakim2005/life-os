@@ -26,6 +26,9 @@
   },
   "author": "Mostakim2005",
   "dependencies": {
-    "adhan": "^4.4.3"
+    "adhan": "^4.4.3",
+    "chart.js": "^4.4.8",
+    "chrono-node": "^2.7.7",
+    "rrule": "^2.8.1"
   }
 }

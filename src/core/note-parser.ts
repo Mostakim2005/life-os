@@ -214,6 +214,13 @@ export function parseDailyNote(
       rest = rest.replace(/🔽/g, "");
     }
 
+    let recurrence: string | undefined;
+    const repeatMatch = /🔁\s*([^\s📅✅⏫🔼🔽]+(?:\s+[^\s📅✅⏫🔼🔽]+)*)/.exec(rest);
+    if (repeatMatch && repeatMatch[1]) {
+      recurrence = repeatMatch[1].trim();
+      rest = rest.replace(repeatMatch[0], "");
+    }
+
     let dueDateIso: string | undefined;
     const dueMatch = /📅\s*(\d{4}-\d{2}-\d{2})/.exec(rest);
     if (dueMatch) {
@@ -237,6 +244,7 @@ export function parseDailyNote(
       priority,
       dueDateIso,
       doneDateIso,
+      recurrence,
     });
   });
 
@@ -319,9 +327,10 @@ export function buildTasksSectionLines(tasks: TaskItem[]): string[] {
     const box = t.done ? "[x]" : "[ ]";
     const prio =
       t.priority === "high" ? " ⏫" : t.priority === "medium" ? " 🔼" : t.priority === "low" ? " 🔽" : "";
+    const repeat = t.recurrence ? ` 🔁 ${t.recurrence}` : "";
     const due = t.dueDateIso ? ` 📅 ${t.dueDateIso}` : "";
     const doneSuffix = t.done && t.doneDateIso ? ` ✅ ${t.doneDateIso}` : "";
-    return `- ${box} ${t.title}${prio}${due}${doneSuffix}`;
+    return `- ${box} ${t.title}${prio}${repeat}${due}${doneSuffix}`;
   });
 }
 

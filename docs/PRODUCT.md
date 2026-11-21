@@ -42,13 +42,26 @@
   * `src/interop/inbox-reconciler.ts` -> `writeSuperProductivityExport`
   * `src/interop/inbox-reconciler.ts` -> `writeLoopHabitsExport`
 
+### [FEATURE: Interactive-ChartJS-Canvases] | Aliases: chart.js renderer, interactive stats charts
+> **1-Line Summary:** Tree-shaken Chart.js canvas charts with hover tooltips, goal reference lines, and dynamic theme palette detection.
+* **Code Anchors (Grep Targets):**
+  * `src/core/chartjs-renderer.ts` -> `renderInteractiveChart`
+  * `src/views.ts` -> `renderStatsTab`
+
+### [FEATURE: Natural-Language-Dates-And-Recurrence] | Aliases: chrono node, rrule, recurring tasks
+> **1-Line Summary:** Natural-language date extraction in task quick-add via chrono-node and recurring task rescheduling via rrule.
+* **Code Anchors (Grep Targets):**
+  * `src/core/task-nlp.ts` -> `parseNaturalLanguageTask`
+  * `src/core/task-nlp.ts` -> `computeNextRecurringDate`
+  * `src/views.ts` -> `renderTasksPane`
+
+### [FEATURE: Offline-Python-Analytics] | Aliases: python pandas script, monthly health summary
+> **1-Line Summary:** Offline Python CLI script parsing standard inline fields to output monthly trend charts and CSV reports with desktop Obsidian command trigger.
+* **Code Anchors (Grep Targets):**
+  * `scripts/life_os_analytics.py` -> `main`
+  * `src/main.ts` -> `runPythonAnalytics`
+
 ## 3. Planned Features & App-Merge Wishlist
 
-### [WISHLIST: Interactive-ChartJS-Overlay] | Aliases: chart.js upgrade, multi-series trend charts
-> **1-Line Summary:** Optional Phase 2 Chart.js integration for canvas-based tooltips and multi-series health overlays.
-
-### [WISHLIST: Natural-Language-Dates-And-Recurrence] | Aliases: chrono node, rrule, recurring tasks
-> **1-Line Summary:** Optional natural-language task creation via chrono-node and recurring task scheduling via rrule.
-
-### [WISHLIST: Offline-Python-Analytics] | Aliases: python pandas script, monthly health pdf
-> **1-Line Summary:** Offline Python CLI script parsing standard inline fields to output monthly trend charts and CSV reports.
+### [WISHLIST: Wearable-Health-Auto-Sync] | Aliases: google fit sync, sleep data import
+> **1-Line Summary:** Local bridge to import sleep hours and step count from exported health archives.

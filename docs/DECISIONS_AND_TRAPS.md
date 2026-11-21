@@ -32,3 +32,10 @@
 * **Protected Code Anchors (Grep Targets):**
   * `src/core/date-format.ts` -> `formatDateDdMmYyyy`
   * `src/core/note-parser.ts` -> `parseDailyNote`
+
+### [TRAP: ChartJS-Canvas-Memory-Leaks] | Aliases: chart destroy, memory leak prevention
+> **1-Line Summary:** Re-rendering stats or closing cockpit without destroying Chart instances leaks canvas references and event listeners.
+* **Strict Rule:** Every mounted Chart instance must be registered in `this.activeCharts` and destroyed via `c.destroy()` upon re-render and `onClose()`.
+* **Protected Code Anchors (Grep Targets):**
+  * `src/views.ts` -> `destroyActiveCharts`
+  * `src/views.ts` -> `onClose`

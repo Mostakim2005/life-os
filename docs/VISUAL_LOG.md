@@ -47,3 +47,54 @@ flowchart TD
         L3([Green = Updated Local Markdown Note]):::outputNode
     end
 ```
+
+### [VISUAL: Task-NLP-And-Recurrence-Lifecycle] | Aliases: task chrono parse, rrule reschedule
+> **1-Line Summary:** Chrono-node extracts natural language dates during task entry; on completion, RRule calculates and schedules the next date.
+
+```mermaid
+flowchart TD
+    %% Color Definitions (Obsidian & GitHub compatible)
+    classDef startNode fill:#1d4ed8,stroke:#1e3a8a,color:#ffffff
+    classDef processNode fill:#0f766e,stroke:#115e59,color:#ffffff
+    classDef outputNode fill:#15803d,stroke:#14532d,color:#ffffff
+    classDef rruleNode fill:#d97706,stroke:#b45309,color:#ffffff
+
+    Input([User inputs task with date phrase & recurrence]):::startNode --> Chrono[Chrono-Node Extracts Due Date & Strips Title]:::processNode
+    Chrono --> AddTask[Task saved with dueDateIso and recurrence token]:::processNode
+    AddTask --> Complete([User checks task done]):::startNode
+    Complete --> CheckRecurrence{Has 🔁 Recurrence?}:::processNode
+    CheckRecurrence -->|No| Done([Task marked done with ✅ date]):::outputNode
+    CheckRecurrence -->|Yes| ComputeNext[RRule Computes Next Date]:::rruleNode
+    ComputeNext --> ScheduleNext([Append fresh task to target DD-MM-YYYY note]):::outputNode
+
+    subgraph Legend["Legend (Color Guide)"]
+        L1([Blue = User Action]):::startNode
+        L2[Teal = Chrono NLP Processing]:::processNode
+        L3[Amber = RRule Next Date Calculation]:::rruleNode
+        L4([Green = Markdown Daily Note Storage]):::outputNode
+    end
+```
+
+### [VISUAL: Offline-Python-Analytics-Pipeline] | Aliases: python analytics pipeline, monthly report flow
+> **1-Line Summary:** Python script parses inline fields across daily notes to produce rolling averages, CSV summary, and PNG trend plots.
+
+```mermaid
+flowchart TD
+    %% Color Definitions (Obsidian & GitHub compatible)
+    classDef startNode fill:#1d4ed8,stroke:#1e3a8a,color:#ffffff
+    classDef processNode fill:#0f766e,stroke:#115e59,color:#ffffff
+    classDef outputNode fill:#15803d,stroke:#14532d,color:#ffffff
+
+    Trigger([Obsidian Command / Terminal Trigger]):::startNode --> Scan[Scan DD-MM-YYYY.md Notes in Vault Folder]:::processNode
+    Scan --> Extract[Regex Extraction: sleep, water, prayers, habits]:::processNode
+    Extract --> Compute[Calculate 7-Day Rolling Averages & Jamaah %]:::processNode
+    Compute --> ExportCSV([Write exports/monthly-summary.csv]):::outputNode
+    Compute --> RenderPlot([Render 3-Panel Matplotlib Figure]):::processNode
+    RenderPlot --> ExportPNG([Save exports/monthly-trends.png]):::outputNode
+
+    subgraph Legend["Legend (Color Guide)"]
+        L1([Blue = Command or Script Trigger]):::startNode
+        L2[Teal = Analytics & Parsing Engine]:::processNode
+        L3([Green = Export Deliverables: CSV & PNG]):::outputNode
+    end
+```
