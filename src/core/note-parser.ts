@@ -215,7 +215,7 @@ export function parseDailyNote(
     }
 
     let recurrence: string | undefined;
-    const repeatMatch = /🔁\s*([^\s📅✅⏫🔼🔽]+(?:\s+[^\s📅✅⏫🔼🔽]+)*)/.exec(rest);
+    const repeatMatch = /🔁\s*([^\s📅✅⏫🔼🔽]+(?:\s+[^\s📅✅⏫🔼🔽]+)*)/u.exec(rest);
     if (repeatMatch && repeatMatch[1]) {
       recurrence = repeatMatch[1].trim();
       rest = rest.replace(repeatMatch[0], "");

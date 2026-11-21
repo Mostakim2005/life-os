@@ -21,7 +21,7 @@ export function parseNaturalLanguageTask(
   let recurrence: string | undefined;
 
   // 1. Extract recurrence pattern (e.g., 🔁 every day, 🔁 every week)
-  const repeatMatch = /🔁\s*([^\s📅✅⏫🔼🔽]+(?:\s+[^\s📅✅⏫🔼🔽]+)*)/i.exec(title);
+  const repeatMatch = /🔁\s*([^\s📅✅⏫🔼🔽]+(?:\s+[^\s📅✅⏫🔼🔽]+)*)/iu.exec(title);
   if (repeatMatch && repeatMatch[1]) {
     recurrence = repeatMatch[1].trim();
     title = title.replace(repeatMatch[0], "").trim();

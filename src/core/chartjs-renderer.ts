@@ -61,8 +61,6 @@ export function renderInteractiveChart(
   options: ChartJsMetricOptions
 ): Chart {
   const canvas = container.createEl("canvas", { cls: "life-os-chart-canvas" });
-  canvas.style.maxHeight = "160px";
-  canvas.style.width = "100%";
 
   const { textColor, gridColor, fontFamily } = getObsidianThemePalette();
   const labels = summaries.map((s) => s.dateKey.slice(0, 5));

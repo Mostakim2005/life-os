@@ -101,9 +101,9 @@ export default class LifeOSPlugin extends Plugin {
 
     this.addCommand({
       id: "run-python-analytics",
-      name: "Generate monthly analytics report (Python)",
+      name: "Generate monthly analytics report (python)",
       callback: async () => {
-        if (Platform.isMobile) {
+        if (!Platform.isDesktop) {
           new Notice("Python analytics is only available on desktop.");
           return;
         }
@@ -190,13 +190,26 @@ export default class LifeOSPlugin extends Plugin {
   }
 
   async runPythonAnalytics(): Promise<void> {
-    const { execFile } = await import("child_process");
+    if (!Platform.isDesktop) {
+      new Notice("Python analytics is only available on desktop.");
+      return;
+    }
+    const nodeReq = (
+      window as unknown as {
+        require?: (id: string) => { execFile: typeof import("child_process").execFile };
+      }
+    ).require;
+    if (!nodeReq) {
+      new Notice("Node runtime environment is unavailable.");
+      return;
+    }
+    const { execFile } = nodeReq("child_process");
     const folder = normalizePath(this.settings.dailyNotesFolder || "Life OS");
     const adapter = this.app.vault.adapter as { getBasePath?: () => string };
     const basePath = adapter.getBasePath ? adapter.getBasePath() : ".";
     const scriptPath = normalizePath(`${basePath}/.obsidian/plugins/life-os/scripts/life_os_analytics.py`);
 
-    new Notice("Generating Life OS monthly analytics...");
+    new Notice("Generating monthly analytics report...");
     execFile(
       "python",
       [scriptPath, "--vault-folder", folder, "--days", "30"],
