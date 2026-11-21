@@ -1,11 +1,18 @@
 import { App, normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import { DEFAULT_SETTINGS } from "./settings";
-import type { LifeOSSettings, PrayerMethodKey } from "./types";
+import type { LifeOSSettings, PrayerMethodKey, StorageMode, WaterUnit } from "./types";
 import { todayDMY, toDMYKey } from "./core/date-format";
 import { computePrayerTimesWithAdhan } from "./core/prayer-adhan";
 import { replaceBoundedSection } from "./core/markdown-surgery";
-import { detectObsidianEcosystem, formatDataviewMetricLine, formatInteropTaskLine } from "./interop/bridges";
+import { createInitialDailyNoteContent } from "./core/note-parser";
+import { detectObsidianEcosystem } from "./interop/bridges";
 import { exportToLoopHabitsCSV, exportToSuperProductivityJSON } from "./interop/companion-export";
+import {
+  reconcileMobileInbox,
+  writeLoopHabitsExport,
+  writeSuperProductivityExport,
+} from "./interop/inbox-reconciler";
+import { LifeOSCockpitView, VIEW_TYPE_LIFE_OS } from "./views";
 
 export default class LifeOSPlugin extends Plugin {
   settings!: LifeOSSettings;
@@ -13,6 +20,21 @@ export default class LifeOSPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.applyThemePreferences();
+
+    this.registerView(VIEW_TYPE_LIFE_OS, (leaf) => new LifeOSCockpitView(leaf, this));
+
+    // Dedicated left-ribbon button to open the full-window Life OS Cockpit
+    this.addRibbonIcon("layout-dashboard", "Open Life OS Cockpit", () => {
+      void this.activateCockpitView();
+    });
+
+    this.addCommand({
+      id: "open-life-os-cockpit",
+      name: "Open Life OS Cockpit (full-window interactive UI)",
+      callback: async () => {
+        await this.activateCockpitView();
+      },
+    });
 
     this.addCommand({
       id: "open-today-dmy-note",
@@ -44,6 +66,47 @@ export default class LifeOSPlugin extends Plugin {
       callback: async () => this.migrateLegacyDateFilenames(),
     });
 
+    this.addCommand({
+      id: "export-super-productivity-json",
+      name: "Export today's tasks to Super Productivity JSON",
+      callback: async () => {
+        const outPath = await this.runSuperProductivityExport(todayDMY());
+        new Notice(`Exported Super Productivity JSON to ${outPath}`);
+      },
+    });
+
+    this.addCommand({
+      id: "export-loop-habits-csv",
+      name: "Export Life OS habits to Loop Habit Tracker CSV",
+      callback: async () => {
+        const outPath = await this.runLoopHabitsExport();
+        new Notice(`Exported Loop Habit Tracker CSV to ${outPath}`);
+      },
+    });
+
+    this.addCommand({
+      id: "reconcile-mobile-inbox",
+      name: "Reconcile mobile companion .inbox/*.jsonl events",
+      callback: async () => {
+        const count = await reconcileMobileInbox(this.app, this.settings, (dk) =>
+          this.ensureNoteForDate(dk)
+        );
+        new Notice(
+          count > 0
+            ? `Reconciled ${count} companion event(s) into Life OS notes.`
+            : "No pending .inbox/*.jsonl events found."
+        );
+      },
+    });
+
+    this.app.workspace.onLayoutReady(() => {
+      void reconcileMobileInbox(this.app, this.settings, (dk) => this.ensureNoteForDate(dk)).then(
+        (count) => {
+          if (count > 0) new Notice(`Life OS synced ${count} companion event(s).`);
+        }
+      );
+    });
+
     this.addSettingTab(new LifeOSSettingTab(this.app, this));
   }
 
@@ -55,40 +118,44 @@ export default class LifeOSPlugin extends Plugin {
     document.body.toggleClass("life-os-glassmorphic", this.settings.glassmorphism !== false);
   }
 
+  async activateCockpitView(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_LIFE_OS);
+    if (existing.length > 0) {
+      await this.app.workspace.revealLeaf(existing[0]!);
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({ type: VIEW_TYPE_LIFE_OS, active: true });
+    if (this.settings.autoPinCockpitTab) {
+      leaf.setPinned(true);
+    }
+    await this.app.workspace.revealLeaf(leaf);
+  }
+
   async ensureTodayNote(): Promise<TFile> {
+    return this.ensureNoteForDate(todayDMY());
+  }
+
+  async ensureNoteForDate(dateKey: string): Promise<TFile> {
     const folder = normalizePath(this.settings.dailyNotesFolder || "Life OS");
     if (!this.app.vault.getAbstractFileByPath(folder)) {
       await this.app.vault.createFolder(folder);
     }
-    const dateKey = todayDMY();
     const path = normalizePath(`${folder}/${dateKey}.md`);
     const existing = this.app.vault.getAbstractFileByPath(path);
     if (existing instanceof TFile) return existing;
 
-    const times = computePrayerTimesWithAdhan(dateKey, this.settings.prayer);
-    const body = [
-      "---",
-      "life-os: 2",
-      `date: ${dateKey}`,
-      "sleep: ",
-      "water: 0",
-      "---",
-      "",
-      "## Prayers",
-      ...(["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"] as const).map((p) => `- [ ] ${p} [time:: ${times[p]}] [status:: ]`),
-      "",
-      "## Habits",
-      formatDataviewMetricLine("Water", "water", 0),
-      "",
-      "## Tasks",
-      formatInteropTaskLine({ title: "Review top 3 priorities", priority: "high", dueDateKey: dateKey }),
-      "",
-      "## Timeline",
-      "",
-      "## Reflection",
-      "",
-    ].join("\n");
+    const body = createInitialDailyNoteContent(dateKey, this.settings);
     return await this.app.vault.create(path, body);
+  }
+
+  async runSuperProductivityExport(dateKey: string): Promise<string> {
+    const file = await this.ensureNoteForDate(dateKey);
+    return writeSuperProductivityExport(this.app, this.settings, dateKey, file);
+  }
+
+  async runLoopHabitsExport(): Promise<string> {
+    return writeLoopHabitsExport(this.app, this.settings);
   }
 
   async migrateLegacyDateFilenames(): Promise<void> {
@@ -114,6 +181,9 @@ export default class LifeOSPlugin extends Plugin {
     const raw = ((await this.loadData()) ?? {}) as Partial<LifeOSSettings>;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
     this.settings.prayer = Object.assign({}, DEFAULT_SETTINGS.prayer, raw.prayer ?? {});
+    if (!Array.isArray(this.settings.customHabits) || this.settings.customHabits.length === 0) {
+      this.settings.customHabits = [...DEFAULT_SETTINGS.customHabits];
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -128,18 +198,128 @@ class LifeOSSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: LifeOSPlugin) {
     super(app, plugin);
   }
+
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName("Daily planning & prayer schedule").setHeading();
+
+    new Setting(containerEl).setName("Cockpit & Markdown storage").setHeading();
+
+    new Setting(containerEl)
+      .setName("Markdown data storage mode")
+      .setDesc(
+        "Choose inline-only (no YAML Properties block, Dataview/Tracker compatible) or inline + YAML frontmatter."
+      )
+      .addDropdown((d) =>
+        d
+          .addOption("inline-only", "Inline data only (no YAML Properties)")
+          .addOption("inline-and-frontmatter", "Inline data + YAML frontmatter (ISO date)")
+          .setValue(this.plugin.settings.storageMode)
+          .onChange(async (val) => {
+            this.plugin.settings.storageMode = val as StorageMode;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Auto-pin Cockpit tab (close protection)")
+      .setDesc("Automatically pins the Life OS Cockpit tab so it stays open while you browse notes.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.autoPinCockpitTab).onChange(async (val) => {
+          this.plugin.settings.autoPinCockpitTab = val;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Glassmorphic theme styling")
+      .setDesc("Enable frosted glass surfaces and vibrant module color accents.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.glassmorphism).onChange(async (val) => {
+          this.plugin.settings.glassmorphism = val;
+          this.plugin.applyThemePreferences();
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl).setName("Hydration & sleep targets").setHeading();
+
+    new Setting(containerEl)
+      .setName("Default hydration unit")
+      .setDesc("Switch between glasses (0–10) and water bottles (0.5-bottle increments).")
+      .addDropdown((d) =>
+        d
+          .addOption("glasses", "Glasses (0–10)")
+          .addOption("bottle", "Water Bottle (0.5 increments)")
+          .setValue(this.plugin.settings.waterUnit)
+          .onChange(async (val) => {
+            this.plugin.settings.waterUnit = val as WaterUnit;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Water bottle capacity (liters)")
+      .setDesc("Capacity of your water bottle in liters (e.g., 1.1 for a bottle slightly over 1L).")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.bottleVolumeLiters)).onChange(async (val) => {
+          const n = Number(val);
+          if (!Number.isNaN(n) && n >= 0.25 && n <= 5) {
+            this.plugin.settings.bottleVolumeLiters = n;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Daily water target (liters)")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.waterTargetLiters)).onChange(async (val) => {
+          const n = Number(val);
+          if (!Number.isNaN(n) && n >= 0.5 && n <= 10) {
+            this.plugin.settings.waterTargetLiters = n;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Daily sleep target (hours, 1–10)")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.sleepTargetHours)).onChange(async (val) => {
+          const n = Number(val);
+          if (!Number.isNaN(n) && n >= 1 && n <= 10) {
+            this.plugin.settings.sleepTargetHours = Math.round(n * 2) / 2;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Default daily habits")
+      .setDesc("Comma-separated list of habits shown in every new daily note.")
+      .addText((t) =>
+        t.setValue(this.plugin.settings.customHabits.join(", ")).onChange(async (val) => {
+          const parsed = val
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (parsed.length > 0) {
+            this.plugin.settings.customHabits = parsed;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl).setName("Prayer schedule (adhan-js)").setHeading();
 
     const eco = detectObsidianEcosystem(this.app);
     containerEl.createEl("p", {
-      text: `Detected plugins: Tasks(${eco.tasks ? "on" : "off"}), Day Planner(${eco.dayPlanner ? "on" : "off"}), Periodic Notes(${eco.periodicNotes ? "on" : "off"}), Dataview(${eco.dataview ? "on" : "off"}), Tracker(${eco.tracker ? "on" : "off"}).`,
+      text: `Optional companion plugins detected: Tasks(${eco.tasks ? "on" : "off"}), Day Planner(${eco.dayPlanner ? "on" : "off"}), Periodic Notes(${eco.periodicNotes ? "on" : "off"}), Dataview(${eco.dataview ? "on" : "off"}), Tracker(${eco.tracker ? "on" : "off"}). All core features are now built directly into Life OS.`,
     });
 
     new Setting(containerEl)
-      .setName("Prayer Calculation Method (adhan-js)")
+      .setName("Prayer calculation method")
       .addDropdown((d) =>
         d
           .addOption("Karachi", "University of Islamic Sciences, Karachi")
@@ -165,6 +345,30 @@ class LifeOSSettingTab extends PluginSettingTab {
             this.plugin.settings.prayer.madhab = val as "hanafi" | "shafi";
             await this.plugin.saveSettings();
           })
+      );
+
+    new Setting(containerEl)
+      .setName("Latitude")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.prayer.latitude)).onChange(async (val) => {
+          const n = Number(val);
+          if (!Number.isNaN(n) && n >= -90 && n <= 90) {
+            this.plugin.settings.prayer.latitude = n;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Longitude")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.prayer.longitude)).onChange(async (val) => {
+          const n = Number(val);
+          if (!Number.isNaN(n) && n >= -180 && n <= 180) {
+            this.plugin.settings.prayer.longitude = n;
+            await this.plugin.saveSettings();
+          }
+        })
       );
   }
 }
