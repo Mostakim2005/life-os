@@ -208,12 +208,12 @@ class LifeOSSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Markdown data storage mode")
       .setDesc(
-        "Choose inline-only (no YAML Properties block, Dataview/Tracker compatible) or inline + YAML frontmatter."
+        "Choose inline-only (no YAML properties block, dataview/tracker compatible) or inline + YAML frontmatter."
       )
       .addDropdown((d) =>
         d
-          .addOption("inline-only", "Inline data only (no YAML Properties)")
-          .addOption("inline-and-frontmatter", "Inline data + YAML frontmatter (ISO date)")
+          .addOption("inline-only", "Inline data only (no YAML properties)")
+          .addOption("inline-and-frontmatter", "Inline data + YAML frontmatter (iso date)")
           .setValue(this.plugin.settings.storageMode)
           .onChange(async (val) => {
             this.plugin.settings.storageMode = val as StorageMode;
@@ -222,7 +222,7 @@ class LifeOSSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Auto-pin Cockpit tab (close protection)")
+      .setName("Auto-pin cockpit tab (close protection)")
       .setDesc("Automatically pins the Life OS Cockpit tab so it stays open while you browse notes.")
       .addToggle((t) =>
         t.setValue(this.plugin.settings.autoPinCockpitTab).onChange(async (val) => {

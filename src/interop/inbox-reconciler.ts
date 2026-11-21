@@ -1,5 +1,5 @@
 import { normalizePath, TFile, type App } from "obsidian";
-import type { DailyRecord, LifeOSSettings, PrayerName, PrayerStatus } from "../types";
+import type { DailyRecord, LifeOSSettings, PrayerStatus } from "../types";
 import { formatDateDMY, parseAnyDateKey, toISOKey } from "../core/date-format";
 import {
   applyParsedNoteToMarkdown,
