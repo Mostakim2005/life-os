@@ -100,7 +100,7 @@ export async function reconcileMobileInbox(
               (p) => p.name.toLowerCase() === ev.name!.toLowerCase()
             );
             if (target) {
-              const st = (ev.status ?? "prayed") as PrayerStatus;
+              const st = ev.status ?? "prayed";
               target.status = st;
               target.done = st === "prayed" || st === "jamaah" || st === "late";
               appliedEvents++;
@@ -210,7 +210,7 @@ export async function writeLoopHabitsExport(
       habitMap[h.name] = h.done;
     }
     for (const p of parsed.prayers) {
-      const key = `Prayer:${p.name as PrayerName}`;
+      const key = `Prayer:${p.name}`;
       habitKeySet.add(key);
       habitMap[key] = p.done;
     }

@@ -131,10 +131,12 @@ export class LifeOSCockpitView extends ItemView {
   private scheduleDebouncedSave(statusEl?: HTMLElement): void {
     if (statusEl) statusEl.setText("Saving...");
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(async () => {
+    this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
-      await this.persistCurrentNote(false);
-      if (statusEl) statusEl.setText("Saved");
+      void (async () => {
+        await this.persistCurrentNote(false);
+        if (statusEl) statusEl.setText("Saved");
+      })();
     }, 550);
   }
 
@@ -217,9 +219,11 @@ export class LifeOSCockpitView extends ItemView {
     });
 
     const openBtn = actions.createEl("button", { text: "Open Note", cls: "life-os-btn-primary" });
-    openBtn.addEventListener("click", async () => {
-      const file = await this.plugin.ensureNoteForDate(this.selectedDateKey);
-      await this.app.workspace.getLeaf("split").openFile(file);
+    openBtn.addEventListener("click", () => {
+      void (async () => {
+        const file = await this.plugin.ensureNoteForDate(this.selectedDateKey);
+        await this.app.workspace.getLeaf("split").openFile(file);
+      })();
     });
   }
 
@@ -533,7 +537,7 @@ export class LifeOSCockpitView extends ItemView {
   }
 
   private updatePrayerCountdownBadge(): void {
-    const el = this.containerEl.querySelector("[data-life-os-countdown]") as HTMLElement | null;
+    const el = this.containerEl.querySelector<HTMLElement>("[data-life-os-countdown]");
     if (!el || !this.currentNote) return;
 
     if (this.selectedDateKey !== todayDMY()) {
@@ -988,17 +992,21 @@ export class LifeOSCockpitView extends ItemView {
       text: "Export Super Productivity JSON",
       cls: "life-os-btn-subtle",
     });
-    spBtn.addEventListener("click", async () => {
-      const outPath = await this.plugin.runSuperProductivityExport(this.selectedDateKey);
-      new Notice(`Exported tasks to ${outPath}`);
+    spBtn.addEventListener("click", () => {
+      void (async () => {
+        const outPath = await this.plugin.runSuperProductivityExport(this.selectedDateKey);
+        new Notice(`Exported tasks to ${outPath}`);
+      })();
     });
     const loopBtn = exportBtns.createEl("button", {
       text: "Export Loop Habits CSV",
       cls: "life-os-btn-subtle",
     });
-    loopBtn.addEventListener("click", async () => {
-      const outPath = await this.plugin.runLoopHabitsExport();
-      new Notice(`Exported habits to ${outPath}`);
+    loopBtn.addEventListener("click", () => {
+      void (async () => {
+        const outPath = await this.plugin.runLoopHabitsExport();
+        new Notice(`Exported habits to ${outPath}`);
+      })();
     });
   }
 }

@@ -24,13 +24,13 @@ export default class LifeOSPlugin extends Plugin {
     this.registerView(VIEW_TYPE_LIFE_OS, (leaf) => new LifeOSCockpitView(leaf, this));
 
     // Dedicated left-ribbon button to open the full-window Life OS Cockpit
-    this.addRibbonIcon("layout-dashboard", "Open Life OS Cockpit", () => {
+    this.addRibbonIcon("layout-dashboard", "Open cockpit", () => {
       void this.activateCockpitView();
     });
 
     this.addCommand({
-      id: "open-life-os-cockpit",
-      name: "Open Life OS Cockpit (full-window interactive UI)",
+      id: "open-cockpit",
+      name: "Open cockpit (full-window interactive UI)",
       callback: async () => {
         await this.activateCockpitView();
       },
@@ -38,7 +38,7 @@ export default class LifeOSPlugin extends Plugin {
 
     this.addCommand({
       id: "open-today-dmy-note",
-      name: "Open or create today's Life OS note (DD-MM-YYYY)",
+      name: "Open or create today's note (DD-MM-YYYY)",
       callback: async () => {
         const file = await this.ensureTodayNote();
         await this.app.workspace.getLeaf(false).openFile(file);
@@ -62,7 +62,7 @@ export default class LifeOSPlugin extends Plugin {
 
     this.addCommand({
       id: "migrate-dates-to-dmy",
-      name: "Migrate legacy YYYY-MM-DD daily notes to DD-MM-YYYY",
+      name: "Migrate legacy daily notes to DD-MM-YYYY",
       callback: async () => this.migrateLegacyDateFilenames(),
     });
 
@@ -77,7 +77,7 @@ export default class LifeOSPlugin extends Plugin {
 
     this.addCommand({
       id: "export-loop-habits-csv",
-      name: "Export Life OS habits to Loop Habit Tracker CSV",
+      name: "Export habits to Loop Habit Tracker CSV",
       callback: async () => {
         const outPath = await this.runLoopHabitsExport();
         new Notice(`Exported Loop Habit Tracker CSV to ${outPath}`);
