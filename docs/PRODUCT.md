@@ -63,8 +63,24 @@
 
 ## 3. Planned Features & App-Merge Wishlist
 
+### [WISHLIST: Phased-Calendar-Timeline-Tasks-Absorption] | Aliases: day planner, schedule calendar, full calendar remastered, tasknotes, tasks plugin, pomodoro, time blocking
+> **1-Line Summary:** Phased, lazy-loaded absorption of high-value features from 6 external plugins (`obsidian-full-calendar`, `full-calendar-remastered`, `obsidian-day-planner`, `schedule-calendar`, `tasknotes`, `obsidian-tasks-plugin`) into Life OS's existing Cockpit/Calendar/Tasks tabs with strong UI/UX craft and zero startup penalty.
+* **Decision Maker:** `[DECIDED BY: HUMAN]` (Locked in 2026-11-23; reference sources archived in gitignored `_reference-plugins/`).
+* **Phased Rollout Plan:**
+  * **Phase 1 — Visual Time-Blocking Timeline & Drag-and-Drop Schedule Grid *(Implemented in v2.1.0)*:** Hourly vertical timeline + 7-day cross-day drag-and-drop week grid + schedule-badged month calendar synced to daily note timeblocks & `adhan-js` prayer windows.
+  * **Phase 2 — Unified Smart Tasks Engine:** Full Tasks-plugin metadata (due/scheduled/start/done dates, priority pills, filters, recurring task auto-generation, vault-wide task aggregation loaded lazily on tab open).
+  * **Phase 3 — Built-In Pomodoro & Focus Time Tracker:** Session timer + distraction-free focus bar (inspired by `tasknotes`) logging focus minutes directly into daily notes and Stats charts.
+  * **Phase 4 — Lazy External Calendar Feeds (ICS / Optional CalDAV):** On-demand `.ics` URL / Google Calendar overlay inside the Calendar tab (lazy-loaded only when Sync is triggered).
+
 ### [WISHLIST: Wearable-Health-Auto-Sync] | Aliases: google fit sync, sleep data import
 > **1-Line Summary:** Local bridge to import sleep hours and step count from exported health archives.
+
+### [FEATURE: Interactive-Timeline-And-Week-Schedule] | Aliases: day planner, schedule calendar, time blocking, week grid, overlap layout
+> **1-Line Summary:** Visual hourly Day Timeline (with 15-min drag/resize, side-by-side overlap packing, prayer window markers, current-time line, and task-to-timeline drag-and-drop), 7-day cross-day Week Grid, and schedule-badged Month Calendar inside the Schedule & Calendar tab.
+* **Code Anchors (Grep Targets):**
+  * `src/core/timeline-layout.ts` -> `computeOverlapLayout`, `getWeekDates`, `detectBlockTone`
+  * `src/ui/schedule-planner.ts` -> `renderScheduleView`, `ScheduleSubMode`
+  * `src/views.ts` -> `LifeOSCockpitView.renderCalendarTab`, `LifeOSCockpitView.readNoteIfExists`
 
 ### [FEATURE: UI-UX-Parity-And-Accessibility] | Aliases: confirm modal, cockpit status bar, focus visible, reduced motion
 > **1-Line Summary:** Adds ConfirmModal confirmation guardrail for irreversible migrations, clickable Cockpit Status Bar pill, and WCAG accessibility compliance.

@@ -1,6 +1,26 @@
-import * as chrono from "chrono-node";
-import { RRule } from "rrule";
 import { formatDateDMY, toISOKey } from "./date-format";
+
+type ChronoMod = typeof import("chrono-node");
+type RRuleMod = typeof import("rrule");
+
+let chronoCache: ChronoMod | null = null;
+let rruleCache: RRuleMod | null = null;
+
+function getChrono(): ChronoMod {
+  if (!chronoCache) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Deferred load avoids parsing Chrono regex tables on Obsidian startup
+    chronoCache = require("chrono-node") as ChronoMod;
+  }
+  return chronoCache;
+}
+
+function getRRule(): RRuleMod {
+  if (!rruleCache) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Deferred load avoids initializing RRule on Obsidian startup
+    rruleCache = require("rrule") as RRuleMod;
+  }
+  return rruleCache;
+}
 
 export interface ParsedTaskInput {
   title: string;
@@ -27,8 +47,8 @@ export function parseNaturalLanguageTask(
     title = title.replace(repeatMatch[0], "").trim();
   }
 
-  // 2. Parse natural language dates using chrono-node
-  const parsedDates = chrono.parse(title, referenceDate, { forwardDate: true });
+  // 2. Parse natural language dates using lazy-loaded chrono-node
+  const parsedDates = getChrono().parse(title, referenceDate, { forwardDate: true });
   if (parsedDates.length > 0) {
     const first = parsedDates[0]!;
     const dateObj = first.start.date();
@@ -75,7 +95,7 @@ export function computeNextRecurringDate(
 
   // Attempt RRule.fromText parsing
   try {
-    const rule = RRule.fromText(lower);
+    const rule = getRRule().RRule.fromText(lower);
     if (rule) {
       const occurrence = rule.after(fromDate);
       if (occurrence) return occurrence;

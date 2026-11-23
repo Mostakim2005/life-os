@@ -82,6 +82,13 @@ flowchart TB
   * `scripts/life_os_analytics.py` -> `main`
   * `src/main.ts` -> `runPythonAnalytics`
 
+### [SUBSYSTEM: Schedule-And-Timeline-Planner] | Aliases: day timeline, week grid, overlap layout, drag and drop
+> **1-Line Summary:** Pure-TS visual time-blocking Day Timeline (interval-graph overlap layout, 15-min pointer drag/resize, prayer window markers, unscheduled task drag-and-drop) and 7-day cross-day Week Grid reading existing notes lazily without creating empty files on browse.
+* **Code Anchors (Grep Targets):**
+  * `src/core/timeline-layout.ts` -> `computeOverlapLayout`, `getWeekDates`
+  * `src/ui/schedule-planner.ts` -> `renderScheduleView`
+  * `src/views.ts` -> `LifeOSCockpitView.readNoteIfExists`, `LifeOSCockpitView.saveNoteForDate`
+
 ### [SUBSYSTEM: UI-UX-Parity-And-Accessibility] | Aliases: status bar, ribbon icon, confirm modal, focus-visible, reduced-motion
 > **1-Line Summary:** Integrates native Obsidian workspace UI touchpoints (ribbon launcher, live status bar pill, modal confirmation guardrails) and WCAG AA accessibility styles.
 * **Architecture / Subsystem Role:** Standardizes the plugin surface across desktop and mobile Obsidian clients with keyboard accessibility, reduced-motion safety, and high-visibility status telemetry.

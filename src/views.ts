@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, TFile, WorkspaceLeaf, normalizePath } from "obsidian";
 import type { Chart } from "chart.js";
 import type LifeOSPlugin from "./main";
 import type { ParsedDailyNote, PrayerStatus, TaskPriority, WaterUnit } from "./types";
@@ -10,18 +10,21 @@ import {
   clampWaterGlasses,
   computeWaterLiters,
   parseDailyNote,
+  PRAYER_NAMES,
   SLEEP_MAX_HOURS,
   SLEEP_MIN_HOURS,
   SLEEP_STEP_HOURS,
   WATER_GLASS_MAX,
 } from "./core/note-parser";
+import { computePrayerTimesWithAdhan } from "./core/prayer-adhan";
 import {
-  collectMonthSummaries,
   collectRecentSummaries,
   computeAggregateStats,
 } from "./core/stats-engine";
 import { renderInteractiveChart } from "./core/chartjs-renderer";
 import { computeNextRecurringDate, parseNaturalLanguageTask } from "./core/task-nlp";
+import { formatMinutesHHMM, parseTimeMinutes, snapMinutes } from "./core/timeline-layout";
+import { renderScheduleView, type ScheduleSubMode } from "./ui/schedule-planner";
 
 export const VIEW_TYPE_LIFE_OS = "life-os-cockpit-view";
 
@@ -40,6 +43,8 @@ const PRAYER_STATUS_OPTIONS: Array<{ value: PrayerStatus; label: string }> = [
 export class LifeOSCockpitView extends ItemView {
   private plugin: LifeOSPlugin;
   private activeTab: CockpitTab = "cockpit";
+  private scheduleSubMode: ScheduleSubMode = "day";
+  private fullDayHours = false;
   private selectedDateKey: string = todayDMY();
   private calendarYear: number = new Date().getFullYear();
   private calendarMonth: number = new Date().getMonth();
@@ -203,7 +208,7 @@ export class LifeOSCockpitView extends ItemView {
     const tabs = bar.createDiv({ cls: "life-os-mode-tabs" });
     const tabDefs: Array<{ id: CockpitTab; label: string }> = [
       { id: "cockpit", label: "Cockpit" },
-      { id: "calendar", label: "Calendar" },
+      { id: "calendar", label: "Schedule & Calendar" },
       { id: "stats", label: "Stats & Tracker" },
     ];
     for (const def of tabDefs) {
@@ -729,6 +734,38 @@ export class LifeOSCockpitView extends ItemView {
         row.createSpan({ text: task.dueDateIso, cls: "life-os-task-due" });
       }
 
+      if (!task.done) {
+        const schedBtn = row.createEl("button", { text: "⏱", cls: "life-os-btn-subtle life-os-btn-mini" });
+        schedBtn.setAttr("aria-label", "Schedule task onto today's timeline");
+        schedBtn.setAttr("title", "Schedule 1h block on timeline");
+        schedBtn.addEventListener("click", () => {
+          const sorted = note.timeline
+            .map((b) => ({
+              s: parseTimeMinutes(b.startTime),
+              e: Math.max(parseTimeMinutes(b.startTime) + 15, parseTimeMinutes(b.endTime)),
+            }))
+            .sort((a, b) => a.s - b.s);
+          const now = new Date();
+          let startMin = snapMinutes(Math.max(9 * 60, now.getHours() * 60 + now.getMinutes()), 15);
+          for (const b of sorted) {
+            if (startMin + 60 <= b.s) break;
+            if (startMin < b.e) startMin = snapMinutes(b.e, 15);
+          }
+          if (startMin + 60 > 23 * 60 + 45) startMin = 22 * 60;
+          const startTime = formatMinutesHHMM(startMin);
+          const endTime = formatMinutesHHMM(startMin + 60);
+          note.timeline.push({
+            id: `blk-${Date.now()}`,
+            startTime,
+            endTime,
+            title: task.title,
+            done: false,
+          });
+          new Notice(`Scheduled "${task.title}" (${startTime}–${endTime})`);
+          void this.persistCurrentNote(true);
+        });
+      }
+
       const delBtn = row.createEl("button", { text: "×", cls: "life-os-btn-del" });
       delBtn.setAttr("aria-label", "Remove task");
       delBtn.addEventListener("click", () => {
@@ -742,6 +779,15 @@ export class LifeOSCockpitView extends ItemView {
     const pane = parent.createDiv({ cls: "life-os-pane life-os-accent-timeline" });
     const header = pane.createDiv({ cls: "life-os-pane-header" });
     header.createDiv({ text: "Timeline (Day Planner)", cls: "life-os-pane-title" });
+    const fullTlBtn = header.createEl("button", {
+      text: "Full Timeline ↗",
+      cls: "life-os-btn-subtle",
+    });
+    fullTlBtn.addEventListener("click", () => {
+      this.activeTab = "calendar";
+      this.scheduleSubMode = "day";
+      void this.refreshView();
+    });
 
     const addBar = pane.createDiv({ cls: "life-os-quick-bar" });
     const startInput = addBar.createEl("input", { type: "time", cls: "life-os-time-input" });
@@ -831,105 +877,89 @@ export class LifeOSCockpitView extends ItemView {
     });
   }
 
+  private async readNoteIfExists(dateKey: string): Promise<ParsedDailyNote> {
+    const folder = normalizePath(this.plugin.settings.dailyNotesFolder || "Life OS");
+    const dmyPath = normalizePath(`${folder}/${dateKey}.md`);
+    let file = this.app.vault.getAbstractFileByPath(dmyPath);
+    if (!(file instanceof TFile)) {
+      const iso = toISOKey(dateKey);
+      if (iso) {
+        file = this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/${iso}.md`));
+      }
+    }
+    if (file instanceof TFile) {
+      const content = await this.app.vault.cachedRead(file);
+      return parseDailyNote(content, dateKey, this.plugin.settings);
+    }
+    const isoDate = toISOKey(dateKey) ?? dateKey;
+    const times = computePrayerTimesWithAdhan(dateKey, this.plugin.settings.prayer);
+    return {
+      dateKey,
+      isoDate,
+      sleepHours: null,
+      waterMode: this.plugin.settings.waterUnit,
+      waterGlasses: 0,
+      waterBottles: 0,
+      waterLiters: 0,
+      prayers: PRAYER_NAMES.map((name) => ({ name, time: times[name], status: "", done: false })),
+      habits: this.plugin.settings.customHabits.map((name) => ({ name, done: false })),
+      tasks: [],
+      timeline: [],
+      journal: "",
+      reflection: "",
+    };
+  }
+
+  private async saveNoteForDate(dateKey: string, note: ParsedDailyNote): Promise<void> {
+    const file = await this.plugin.ensureNoteForDate(dateKey);
+    await this.app.vault.process(file, (content) =>
+      applyParsedNoteToMarkdown(content, note, this.plugin.settings)
+    );
+  }
+
   private async renderCalendarTab(root: HTMLElement): Promise<void> {
-    const card = root.createDiv({ cls: "life-os-card life-os-calendar-card" });
-    const head = card.createDiv({ cls: "life-os-cal-head" });
-
-    const prevBtn = head.createEl("button", { text: "◀ Prev", cls: "life-os-btn-subtle" });
-    prevBtn.addEventListener("click", () => {
-      this.calendarMonth--;
-      if (this.calendarMonth < 0) {
-        this.calendarMonth = 11;
-        this.calendarYear--;
-      }
-      void this.refreshView();
-    });
-
-    const monthTitle = new Date(this.calendarYear, this.calendarMonth, 1).toLocaleDateString(
-      undefined,
-      { month: "long", year: "numeric" }
-    );
-    head.createDiv({ text: monthTitle, cls: "life-os-date-title" });
-
-    const nextBtn = head.createEl("button", { text: "Next ▶", cls: "life-os-btn-subtle" });
-    nextBtn.addEventListener("click", () => {
-      this.calendarMonth++;
-      if (this.calendarMonth > 11) {
-        this.calendarMonth = 0;
-        this.calendarYear++;
-      }
-      void this.refreshView();
-    });
-
-    const summaries = await collectMonthSummaries(
-      this.app,
-      this.plugin.settings,
-      this.calendarYear,
-      this.calendarMonth
-    );
-
-    const grid = card.createDiv({ cls: "life-os-cal-grid" });
-    for (const dow of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) {
-      grid.createDiv({ text: dow, cls: "life-os-cal-dow" });
-    }
-
-    const firstWeekday = new Date(this.calendarYear, this.calendarMonth, 1).getDay();
-    for (let i = 0; i < firstWeekday; i++) {
-      grid.createDiv({ cls: "life-os-cal-empty" });
-    }
-
-    const daysInMonth = new Date(this.calendarYear, this.calendarMonth + 1, 0).getDate();
-    const today = todayDMY();
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateKey = formatDateDMY(new Date(this.calendarYear, this.calendarMonth, day));
-      const stat = summaries.get(dateKey);
-      const cell = grid.createEl("button", {
-        cls: `life-os-cal-day ${dateKey === today ? "is-today" : ""} ${
-          dateKey === this.selectedDateKey ? "is-selected" : ""
-        }`,
-      });
-
-      cell.createDiv({ text: String(day), cls: "life-os-cal-num" });
-      const dots = cell.createDiv({ cls: "life-os-cal-dots" });
-      if (stat?.exists) {
-        if (stat.prayersDone > 0) {
-          dots.createSpan({
-            cls: `life-os-dot dot-prayer ${stat.prayersDone >= 5 ? "is-full" : ""}`,
-            attr: { title: `Prayers: ${stat.prayersDone}/5` },
-          });
+    await renderScheduleView(root, this.app, this.plugin, {
+      selectedDateKey: this.selectedDateKey,
+      calendarYear: this.calendarYear,
+      calendarMonth: this.calendarMonth,
+      scheduleSubMode: this.scheduleSubMode,
+      fullDayHours: this.fullDayHours,
+      onChangeSubMode: (mode) => {
+        this.scheduleSubMode = mode;
+        void this.refreshView();
+      },
+      onToggleFullDayHours: () => {
+        this.fullDayHours = !this.fullDayHours;
+        void this.refreshView();
+      },
+      onSelectDate: (dateKey) => {
+        this.selectedDateKey = dateKey;
+        const d = parseAnyDateKey(dateKey);
+        if (d) {
+          this.calendarYear = d.getFullYear();
+          this.calendarMonth = d.getMonth();
         }
-        if (stat.sleepHours !== null) {
-          dots.createSpan({
-            cls: "life-os-dot dot-sleep",
-            attr: { title: `Sleep: ${stat.sleepHours}h` },
-          });
-        }
-        if (stat.waterLiters > 0) {
-          dots.createSpan({
-            cls: "life-os-dot dot-water",
-            attr: { title: `Water: ${stat.waterLiters}L` },
-          });
-        }
-        if (stat.hasJournal) {
-          dots.createSpan({
-            cls: "life-os-dot dot-journal",
-            attr: { title: "Journal logged" },
-          });
-        }
-      }
-
-      cell.addEventListener("click", () => {
+      },
+      onShiftDate: (delta) => this.shiftDate(delta),
+      onOpenCockpitForDate: (dateKey) => {
         this.activeTab = "cockpit";
         void this.setDateKey(dateKey);
-      });
-    }
-
-    const legend = card.createDiv({ cls: "life-os-cal-legend" });
-    legend.createSpan({ text: "● Prayers", cls: "legend-prayer" });
-    legend.createSpan({ text: "● Sleep", cls: "legend-sleep" });
-    legend.createSpan({ text: "● Water", cls: "legend-water" });
-    legend.createSpan({ text: "● Journal", cls: "legend-journal" });
+      },
+      onShiftMonth: (delta) => {
+        this.calendarMonth += delta;
+        if (this.calendarMonth < 0) {
+          this.calendarMonth = 11;
+          this.calendarYear -= 1;
+        } else if (this.calendarMonth > 11) {
+          this.calendarMonth = 0;
+          this.calendarYear += 1;
+        }
+        void this.refreshView();
+      },
+      loadNoteForDate: (dateKey) => this.readNoteIfExists(dateKey),
+      saveNoteForDate: (dateKey, note) => this.saveNoteForDate(dateKey, note),
+      onRequestRefresh: () => void this.refreshView(),
+    });
   }
 
   private async renderStatsTab(root: HTMLElement): Promise<void> {

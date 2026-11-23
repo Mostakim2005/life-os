@@ -24,3 +24,7 @@ data.json
 # Allow live runtime bundle
 !runtime/
 !runtime/**
+
+# Local reference source code for feasibility analysis (never committed)
+_reference-plugins/
+

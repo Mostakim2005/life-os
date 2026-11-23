@@ -16,6 +16,7 @@ export interface DayStatSummary {
   habitsTotal: number;
   tasksDone: number;
   tasksTotal: number;
+  timelineCount: number;
   hasJournal: boolean;
 }
 
@@ -67,6 +68,7 @@ export async function summarizeSingleDay(
       habitsTotal: settings.customHabits.length,
       tasksDone: 0,
       tasksTotal: 0,
+      timelineCount: 0,
       hasJournal: false,
     };
   }
@@ -91,6 +93,7 @@ export async function summarizeSingleDay(
     habitsTotal: parsed.habits.length,
     tasksDone,
     tasksTotal: parsed.tasks.length,
+    timelineCount: parsed.timeline.length,
     hasJournal: Boolean(parsed.journal.trim() || parsed.reflection.trim()),
   };
 }

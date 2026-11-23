@@ -1,29 +1,26 @@
-import {
-  Chart,
-  BarController,
-  LineController,
-  BarElement,
-  LineElement,
-  PointElement,
-  LinearScale,
-  CategoryScale,
-  Tooltip,
-  Legend,
-} from "chart.js";
+import type { Chart as ChartType } from "chart.js";
 import type { DayStatSummary } from "./stats-engine";
 
-// Register only tree-shaken Chart.js modules
-Chart.register(
-  BarController,
-  LineController,
-  BarElement,
-  LineElement,
-  PointElement,
-  LinearScale,
-  CategoryScale,
-  Tooltip,
-  Legend
-);
+let chartRegistered = false;
+function getChartConstructor(): typeof ChartType {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Deferred load avoids initializing Chart.js during Obsidian startup
+  const mod = require("chart.js") as typeof import("chart.js");
+  if (!chartRegistered) {
+    chartRegistered = true;
+    mod.Chart.register(
+      mod.BarController,
+      mod.LineController,
+      mod.BarElement,
+      mod.LineElement,
+      mod.PointElement,
+      mod.LinearScale,
+      mod.CategoryScale,
+      mod.Tooltip,
+      mod.Legend
+    );
+  }
+  return mod.Chart;
+}
 
 export interface ChartJsMetricOptions {
   label: string;
@@ -59,7 +56,8 @@ export function renderInteractiveChart(
   container: HTMLElement,
   summaries: DayStatSummary[],
   options: ChartJsMetricOptions
-): Chart {
+): ChartType {
+  const Chart = getChartConstructor();
   const canvas = container.createEl("canvas", { cls: "life-os-chart-canvas" });
 
   const { textColor, gridColor, fontFamily } = getObsidianThemePalette();
@@ -67,7 +65,7 @@ export function renderInteractiveChart(
   const data = summaries.map((s) => (s.exists ? options.getValue(s) ?? 0 : 0));
 
   // Base bar dataset
-  const datasets: Chart["data"]["datasets"] = [
+  const datasets: ChartType["data"]["datasets"] = [
     {
       type: "bar",
       label: options.label,

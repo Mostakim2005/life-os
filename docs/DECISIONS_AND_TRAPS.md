@@ -45,3 +45,8 @@
 * **Decision Maker:** `[DECIDED BY: HUMAN]`
 * **Protected Code Anchors (Grep Targets):** `src/main.ts` -> `onload`, `settingsReady`
 
+
+### [DECISION: Pure-TS-Schedule-And-Lazy-Chart-NLP] | Aliases: lazy chartjs, lazy chrono, pure ts timeline, no react svelte bloat
+> **1-Line Summary:** Built Phase 1 Day Timeline and Week Grid in pure TypeScript (`src/core/timeline-layout.ts`, `src/ui/schedule-planner.ts`) rather than importing React/Svelte/FullCalendar, and moved `chart.js`, `chrono-node`, and `rrule` behind on-demand `require()` thunks so Obsidian startup stays <15 ms.
+* **Decision Maker:** `[DECIDED BY: HUMAN]`
+* **Protected Code Anchors (Grep Targets):** `src/core/chartjs-renderer.ts` -> `getChartConstructor`, `src/core/task-nlp.ts` -> `getChrono`, `src/core/timeline-layout.ts` -> `computeOverlapLayout`
