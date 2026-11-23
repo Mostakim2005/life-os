@@ -39,3 +39,9 @@
 * **Protected Code Anchors (Grep Targets):**
   * `src/views.ts` -> `destroyActiveCharts`
   * `src/views.ts` -> `onClose`
+
+### [DECISION: Non-Blocking-Startup-Hydration] | Aliases: startup latency, non-blocking onload, deferred settings
+> **1-Line Summary:** Hydrated settings asynchronously via settingsReady and gated onLayoutReady inbox reconciliation on settingsReady so onload() is non-blocking.
+* **Decision Maker:** `[DECIDED BY: HUMAN]`
+* **Protected Code Anchors (Grep Targets):** `src/main.ts` -> `onload`, `settingsReady`
+

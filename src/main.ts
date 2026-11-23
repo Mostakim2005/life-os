@@ -16,11 +16,17 @@ import { LifeOSCockpitView, VIEW_TYPE_LIFE_OS } from "./views";
 import { ConfirmModal } from "./ui/confirm-modal";
 
 export default class LifeOSPlugin extends Plugin {
-  settings!: LifeOSSettings;
+  settings: LifeOSSettings = {
+    ...DEFAULT_SETTINGS,
+    prayer: { ...DEFAULT_SETTINGS.prayer },
+    customHabits: [...DEFAULT_SETTINGS.customHabits],
+  };
+  private settingsReady: Promise<void> = Promise.resolve();
 
-  async onload(): Promise<void> {
-    await this.loadSettings();
-    this.applyThemePreferences();
+  onload(): void {
+    this.settingsReady = this.loadSettings().then(() => {
+      this.applyThemePreferences();
+    });
 
     this.registerView(VIEW_TYPE_LIFE_OS, (leaf) => new LifeOSCockpitView(leaf, this));
 
@@ -122,10 +128,12 @@ export default class LifeOSPlugin extends Plugin {
     });
 
     this.app.workspace.onLayoutReady(() => {
-      void reconcileMobileInbox(this.app, this.settings, (dk) => this.ensureNoteForDate(dk)).then(
-        (count) => {
-          if (count > 0) new Notice(`Life OS synced ${count} companion event(s).`);
-        }
+      void this.settingsReady.then(() =>
+        reconcileMobileInbox(this.app, this.settings, (dk) => this.ensureNoteForDate(dk)).then(
+          (count) => {
+            if (count > 0) new Notice(`Life OS synced ${count} companion event(s).`);
+          }
+        )
       );
     });
 
@@ -259,6 +267,7 @@ export default class LifeOSPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
+    await this.settingsReady;
     await this.saveData(this.settings);
   }
 
