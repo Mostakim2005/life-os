@@ -10,6 +10,8 @@ export interface DayStatSummary {
   sleepHours: number | null;
   waterLiters: number;
   waterGlasses: number;
+  focusMinutes: number;
+  focusSessions: number;
   prayersDone: number;
   prayersJamaah: number;
   habitsDone: number;
@@ -24,6 +26,9 @@ export interface AggregateStats {
   trackedDays: number;
   avgSleep: number | null;
   avgWaterLiters: number;
+  totalFocusMinutes: number;
+  avgFocusMinutes: number;
+  totalFocusSessions: number;
   prayerCompletionPct: number;
   jamaahPct: number;
   prayerStreakDays: number;
@@ -62,6 +67,8 @@ export async function summarizeSingleDay(
       sleepHours: null,
       waterLiters: 0,
       waterGlasses: 0,
+      focusMinutes: 0,
+      focusSessions: 0,
       prayersDone: 0,
       prayersJamaah: 0,
       habitsDone: 0,
@@ -87,6 +94,8 @@ export async function summarizeSingleDay(
     sleepHours: parsed.sleepHours,
     waterLiters: parsed.waterLiters,
     waterGlasses: parsed.waterGlasses,
+    focusMinutes: parsed.focusMinutes,
+    focusSessions: parsed.focusSessions,
     prayersDone,
     prayersJamaah,
     habitsDone,
@@ -144,6 +153,10 @@ export function computeAggregateStats(days: DayStatSummary[]): AggregateStats {
         100
       : 0;
 
+  const totalFocusMinutes = existing.reduce((acc, d) => acc + d.focusMinutes, 0);
+  const totalFocusSessions = existing.reduce((acc, d) => acc + d.focusSessions, 0);
+  const avgFocusMinutes = existing.length > 0 ? Math.round(totalFocusMinutes / existing.length) : 0;
+
   const totalPossiblePrayers = existing.length * 5;
   const totalPrayersDone = existing.reduce((acc, d) => acc + d.prayersDone, 0);
   const totalJamaah = existing.reduce((acc, d) => acc + d.prayersJamaah, 0);
@@ -172,6 +185,9 @@ export function computeAggregateStats(days: DayStatSummary[]): AggregateStats {
     trackedDays: existing.length,
     avgSleep,
     avgWaterLiters,
+    totalFocusMinutes,
+    avgFocusMinutes,
+    totalFocusSessions,
     prayerCompletionPct,
     jamaahPct,
     prayerStreakDays,

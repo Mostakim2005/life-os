@@ -27,6 +27,16 @@ export const WATER_BOTTLE_MIN = 0;
 export const WATER_BOTTLE_MAX = 5.0;
 export const WATER_BOTTLE_STEP = 0.5;
 
+export function clampFocusMinutes(value: number | null | undefined): number {
+  const n = Math.round(Number(value) || 0);
+  return Math.max(0, Math.min(1440, n));
+}
+
+export function clampFocusSessions(value: number | null | undefined): number {
+  const n = Math.round(Number(value) || 0);
+  return Math.max(0, Math.min(100, n));
+}
+
 export function clampSleepHours(value: number | null | undefined): number | null {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return null;
   const n = Number(value);
@@ -146,6 +156,23 @@ export function parseDailyNote(
     settings.bottleVolumeLiters
   );
 
+  // 2b. Focus time (minutes & sessions)
+  const focusMinutesRaw =
+    extractInlineField(markdown, "focus_minutes") ??
+    extractFrontmatterValue(markdown, "focus_minutes");
+  const focusMinutes =
+    focusMinutesRaw !== null && focusMinutesRaw !== ""
+      ? clampFocusMinutes(Number(focusMinutesRaw))
+      : 0;
+
+  const focusSessionsRaw =
+    extractInlineField(markdown, "focus_sessions") ??
+    extractFrontmatterValue(markdown, "focus_sessions");
+  const focusSessions =
+    focusSessionsRaw !== null && focusSessionsRaw !== ""
+      ? clampFocusSessions(Number(focusSessionsRaw))
+      : 0;
+
   // 3. Prayers
   const prayerLines = extractSectionLines(markdown, "Prayers");
   const prayerMap = new Map<PrayerName, PrayerEntry>();
@@ -230,6 +257,8 @@ export function parseDailyNote(
     waterGlasses,
     waterBottles,
     waterLiters,
+    focusMinutes,
+    focusSessions,
     prayers: PRAYER_NAMES.map((n) => prayerMap.get(n)!),
     habits,
     tasks,
@@ -266,6 +295,11 @@ export function buildHabitsSectionLines(note: ParsedDailyNote, settings: LifeOSS
         : note.waterGlasses;
     lines.push(
       `- Water: [water_mode:: ${note.waterMode}] [water:: ${equivGlasses}] [water_bottles:: ${note.waterBottles}] [water_liters:: ${liters.toFixed(2)}]`
+    );
+  }
+  if (settings.studyTracking && (note.focusMinutes > 0 || note.focusSessions > 0)) {
+    lines.push(
+      `- Focus: [focus_minutes:: ${clampFocusMinutes(note.focusMinutes)}] [focus_sessions:: ${clampFocusSessions(note.focusSessions)}]`
     );
   }
   if (settings.habitTracking) {
@@ -412,6 +446,8 @@ function syncFrontmatterBlock(
     `sleep: ${note.sleepHours !== null ? note.sleepHours : ""}`,
     `water: ${note.waterGlasses}`,
     `water_liters: ${liters.toFixed(2)}`,
+    `focus_minutes: ${clampFocusMinutes(note.focusMinutes)}`,
+    `focus_sessions: ${clampFocusSessions(note.focusSessions)}`,
     "---",
   ].join(eol);
 
@@ -432,6 +468,8 @@ export function createInitialDailyNoteContent(dateKey: string, settings: LifeOSS
     waterGlasses: 0,
     waterBottles: 0,
     waterLiters: 0,
+    focusMinutes: 0,
+    focusSessions: 0,
     prayers: PRAYER_NAMES.map((name) => ({
       name,
       time: times[name],
@@ -463,6 +501,8 @@ export function createInitialDailyNoteContent(dateKey: string, settings: LifeOSS
           "sleep: ",
           "water: 0",
           "water_liters: 0.00",
+          "focus_minutes: 0",
+          "focus_sessions: 0",
           "---",
           "",
         ];

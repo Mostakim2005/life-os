@@ -60,3 +60,13 @@
 > **1-Line Summary:** Two task-mutation hazards: recurrence regexes must exclude `⏳`/`🛫`/`📅`/`✅` so trailing dates are not captured into `recurrence`, and direct vault line edits must re-verify line identity against `rawLine`/title inside `app.vault.process` instead of trusting potentially stale line indices.
 * **Strict Rule:** Always parse `🛫`, `⏳`, `📅`, `✅`, and priority emojis before matching `🔁` (and exclude them from its character class), and always resolve target task indices via `findMatchingLineIndex` inside `app.vault.process`.
 * **Protected Code Anchors (Grep Targets):** `src/core/note-parser.ts` -> `parseTaskLine`, `src/core/vault-task-index.ts` -> `findMatchingLineIndex`
+
+### [DECISION: Lazy-WallClock-Pomodoro-Engine] | Aliases: pomodoro timer, focus engine, zero idle interval, status bar timer
+> **1-Line Summary:** Hosted `PomodoroEngine` lazily on `LifeOSPlugin` using wall-clock `targetEndMs` timestamps and zero active intervals when idle, preserving timer continuity across tab switches and displaying live countdowns in Obsidian's status bar pill.
+* **Decision Maker:** `[DECIDED BY: AGENT]` (Following user zero-startup-cost mandate)
+* **Protected Code Anchors (Grep Targets):** `src/core/pomodoro-engine.ts` -> `PomodoroEngine`, `src/main.ts` -> `ensurePomodoroEngine`
+
+### [TRAP: Reentrant-Timer-Tick-And-DOM-Focus-Stealing] | Aliases: double log focus, timer input focus loss
+> **1-Line Summary:** Naive `setInterval` timers double-log slow async vault writes at 00:00 and re-rendering the bar every second blurs active text inputs.
+* **Strict Rule:** Always stop the interval and set `isFinishing` before awaiting `logFocusToDailyNote`, and update only countdown text, progress fills, and button states in place via subscribed callbacks (cleaning up via returned unsubscribe hooks in `cleanupFocusBar`).
+* **Protected Code Anchors (Grep Targets):** `src/core/pomodoro-engine.ts` -> `finishPhase`, `src/ui/pomodoro-bar.ts` -> `renderCompactFocusBar`, `src/views.ts` -> `cleanupFocusBar`

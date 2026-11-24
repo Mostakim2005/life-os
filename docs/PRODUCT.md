@@ -70,7 +70,7 @@
 * **Phased Rollout Plan:**
   * **Phase 1 — Visual Time-Blocking Timeline & Drag-and-Drop Schedule Grid *(Implemented in v2.1.0)*:** Hourly vertical timeline + 7-day cross-day drag-and-drop week grid + schedule-badged month calendar synced to daily note timeblocks & `adhan-js` prayer windows.
   * **Phase 2 — Unified Smart Tasks Engine *(Implemented in v2.2.0)*:** Full Tasks-plugin metadata (`⏫`/`🔼`/`🔽`, `🔁` recurrence, `🛫` start, `⏳` scheduled, `📅` due, `✅` done, `#tags`), vault-wide lazy `mtime`-cached task hub, and 1-click timeline scheduling loaded on demand when opening the `Tasks` tab.
-  * **Phase 3 — Built-In Pomodoro & Focus Time Tracker:** Session timer + distraction-free focus bar (inspired by `tasknotes`) logging focus minutes directly into daily notes and Stats charts.
+  * **Phase 3 — Built-In Pomodoro & Focus Time Tracker *(Implemented in v2.3.0)*:** Wall-clock Pomodoro session timer + compact Focus Bar + distraction-free Zen Focus mode (inspired by `tasknotes`), live Obsidian status bar countdown, direct `[focus_minutes::]` / `[focus_sessions::]` logging & completed timeline blocks, and Focus Minutes KPI + interactive Chart.js trend.
   * **Phase 4 — Lazy External Calendar Feeds (ICS / Optional CalDAV):** On-demand `.ics` URL / Google Calendar overlay inside the Calendar tab (lazy-loaded only when Sync is triggered).
 
 ### [WISHLIST: Wearable-Health-Auto-Sync] | Aliases: google fit sync, sleep data import
@@ -96,3 +96,12 @@
   * `src/core/vault-task-index.ts` -> `VaultTaskIndex`, `toggleVaultTask`, `cycleVaultTaskPriority`, `postponeVaultTask`
   * `src/ui/tasks-hub.ts` -> `renderTasksHub`
   * `src/views.ts` -> `LifeOSCockpitView.renderTasksTab`
+
+### [FEATURE: Built-In-Pomodoro-And-Focus-Tracker] | Aliases: pomodoro timer, zen focus mode, focus bar, focus chart, study minutes
+> **1-Line Summary:** Built-in wall-clock Pomodoro sprint timer, compact persistent Focus Bar, distraction-free Zen Focus mode, live status bar countdown, automatic `[focus_minutes::]` / timeline logging, and interactive Focus Minutes analytics chart.
+* **Code Anchors (Grep Targets):**
+  * `src/core/pomodoro-engine.ts` -> `PomodoroEngine`, `logFocusToDailyNote`
+  * `src/ui/pomodoro-bar.ts` -> `renderCompactFocusBar`, `renderZenFocusView`
+  * `src/main.ts` -> `LifeOSPlugin.ensurePomodoroEngine`, `LifeOSPlugin.updateStatusBarPill`
+  * `src/core/stats-engine.ts` -> `summarizeSingleDay`, `computeAggregateStats`
+  * `src/views.ts` -> `LifeOSCockpitView.toggleZenFocusMode`, `LifeOSCockpitView.renderStatsTab`

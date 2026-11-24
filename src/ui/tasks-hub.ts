@@ -37,6 +37,7 @@ export interface TasksHubHost {
   onCyclePriority(entry: VaultTaskEntry): Promise<void>;
   onPostponeTask(entry: VaultTaskEntry): Promise<void>;
   onScheduleTask(entry: VaultTaskEntry): Promise<void>;
+  onStartFocus?: (entry: VaultTaskEntry) => void;
   onDeleteTask(entry: VaultTaskEntry): Promise<void>;
   onOpenFile(filePath: string): Promise<void>;
 }
@@ -601,6 +602,16 @@ function renderTaskRow(
 
   const actions = row.createDiv({ cls: "life-os-th-actions" });
   if (!t.done) {
+    if (host.onStartFocus) {
+      const startFocus = host.onStartFocus;
+      const focusBtn = actions.createEl("button", {
+        text: "🍅",
+        cls: "life-os-btn-subtle life-os-btn-mini",
+        attr: { type: "button", title: "Start Pomodoro focus session on this task" },
+      });
+      focusBtn.addEventListener("click", () => startFocus(entry));
+    }
+
     const schedBtn = actions.createEl("button", {
       text: "⏱",
       cls: "life-os-btn-subtle life-os-btn-mini",

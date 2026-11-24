@@ -11,6 +11,19 @@ export type WaterUnit = "glasses" | "bottle";
 export type PrayerName = "Fajr" | "Dhuhr" | "Asr" | "Maghrib" | "Isha";
 export type PrayerStatus = "" | "prayed" | "jamaah" | "late" | "missed";
 export type TaskPriority = "high" | "medium" | "low" | "none";
+export type PomodoroPhase = "work" | "shortBreak" | "longBreak";
+
+export interface PomodoroSettings {
+  workMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  longBreakInterval: number;
+  autoStartBreaks: boolean;
+  autoStartWork: boolean;
+  soundEnabled: boolean;
+  logTimeblockOnComplete: boolean;
+  dailyFocusTargetMinutes: number;
+}
 
 export interface PrayerSettings {
   latitude: number;
@@ -43,6 +56,7 @@ export interface LifeOSSettings {
   emitTasksEmojiSyntax: boolean;
   emitDayPlannerBlocks: boolean;
   glassmorphism: boolean;
+  pomodoro: PomodoroSettings;
 }
 
 export interface PrayerEntry {
@@ -86,6 +100,8 @@ export interface ParsedDailyNote {
   waterGlasses: number; // Strictly integer [0, 10]
   waterBottles: number; // Strictly [0, 5.0] in 0.5 steps
   waterLiters: number;
+  focusMinutes: number; // Strictly [0, 1440]
+  focusSessions: number; // Strictly [0, 100]
   prayers: PrayerEntry[];
   habits: HabitItem[];
   tasks: TaskItem[];

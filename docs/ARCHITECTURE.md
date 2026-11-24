@@ -14,7 +14,9 @@ flowchart TB
     User([User Habit / Metric / Tab Action]):::startNode --> Cockpit[LifeOSCockpitView]:::processNode
     Cockpit --> NoteParser[Note Parser & Section Builder]:::processNode
     Cockpit --> TaskHub[VaultTaskIndex & Tasks Hub]:::processNode
+    Cockpit --> FocusTimer[PomodoroEngine & Focus Bar]:::processNode
     TaskHub -->|lazy mtime scan & in-place process| VaultFiles[(All Vault Markdown Notes)]:::outputNode
+    FocusTimer -->|logs focus minutes & completed blocks| NoteFile
     NoteParser -->|non-destructive inline update| NoteFile[(Daily Note DD-MM-YYYY.md)]:::outputNode
     NoteFile -->|reads history across days| Stats[StatsEngine]:::processNode
     Stats -->|renders zero-dependency SVG charts & calendar dots| Cockpit
@@ -135,3 +137,32 @@ flowchart LR
   * `src/core/vault-task-index.ts` -> `VaultTaskIndex`, `toggleVaultTask`, `cycleVaultTaskPriority`, `postponeVaultTask`
   * `src/ui/tasks-hub.ts` -> `renderTasksHub`
   * `src/views.ts` -> `LifeOSCockpitView.renderTasksTab`
+
+### [SUBSYSTEM: Pomodoro-And-Focus-Time-Tracker] | Aliases: pomodoro engine, zen focus, focus bar, status bar timer
+> **1-Line Summary:** Plugin-hosted wall-clock Pomodoro state machine driving the Focus Bar, Zen Focus mode, Obsidian status bar countdown, and daily focus logging with zero idle background timers.
+* **How It Works (Plain English):** `ensurePomodoroEngine()` creates the `PomodoroEngine` lazily on first interaction or view mount, with zero timers started until the user begins a sprint. Ticks use wall-clock `targetEndMs` timestamps and push snapshot updates in place to both the Obsidian status bar pill (`main.ts`) and whichever Focus UI (`renderCompactFocusBar` or `renderZenFocusView`) is currently mounted, logging completed sessions cleanly via `app.vault.process` into `[focus_minutes::]`, `[focus_sessions::]`, optional `## Timeline` blocks, and Stats charts.
+* **Component Diagram:**
+```mermaid
+flowchart LR
+    classDef uiNode fill:#1d4ed8,stroke:#1e3a8a,color:#ffffff
+    classDef engineNode fill:#0f766e,stroke:#115e59,color:#ffffff
+    classDef storeNode fill:#15803d,stroke:#14532d,color:#ffffff
+
+    User([User Starts Sprint / Task Focus]):::uiNode --> Engine["PomodoroEngine (targetEndMs Clock)"]:::engineNode
+    Engine -->|1s snapshot updates| Compact[Focus Bar & Zen Focus UI]:::uiNode
+    Engine -->|live countdown text| StatusBar[Obsidian Status Bar Pill]:::uiNode
+    Engine -->|phase completes + isFinishing lock| Logger["logFocusToDailyNote (vault.process)"]:::engineNode
+    Logger -->|updates focus_minutes & Timeline block| Note[(Today Daily Note.md)]:::storeNode
+    Note -->|30d history| Stats[StatsEngine & Focus Chart]:::engineNode
+
+    subgraph Legend["Legend"]
+        L1([Blue = User & Focus Views]):::uiNode
+        L2[Teal = Timer Engine & Stats]:::engineNode
+        L3[(Green = Daily Note Markdown)]:::storeNode
+    end
+```
+* **Code Anchors (Grep Targets):**
+  * `src/core/pomodoro-engine.ts` -> `PomodoroEngine`, `logFocusToDailyNote`
+  * `src/ui/pomodoro-bar.ts` -> `renderCompactFocusBar`, `renderZenFocusView`
+  * `src/main.ts` -> `LifeOSPlugin.ensurePomodoroEngine`
+  * `src/views.ts` -> `LifeOSCockpitView.toggleZenFocusMode`, `LifeOSCockpitView.renderStatsTab`

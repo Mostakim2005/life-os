@@ -14,14 +14,24 @@ import {
 } from "./interop/inbox-reconciler";
 import { LifeOSCockpitView, VIEW_TYPE_LIFE_OS } from "./views";
 import { ConfirmModal } from "./ui/confirm-modal";
+import {
+  formatMMSS,
+  logFocusToDailyNote,
+  PomodoroEngine,
+  type PomodoroSnapshot,
+} from "./core/pomodoro-engine";
 
 export default class LifeOSPlugin extends Plugin {
   settings: LifeOSSettings = {
     ...DEFAULT_SETTINGS,
     prayer: { ...DEFAULT_SETTINGS.prayer },
     customHabits: [...DEFAULT_SETTINGS.customHabits],
+    pomodoro: { ...DEFAULT_SETTINGS.pomodoro },
   };
   private settingsReady: Promise<void> = Promise.resolve();
+  private pomodoroEngine: PomodoroEngine | null = null;
+  private statusEl: HTMLElement | null = null;
+  private unsubscribeStatus: (() => void) | null = null;
 
   onload(): void {
     this.settingsReady = this.loadSettings().then(() => {
@@ -127,6 +137,23 @@ export default class LifeOSPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "toggle-pomodoro-timer",
+      name: "Start or pause focus timer",
+      callback: () => {
+        const engine = this.ensurePomodoroEngine();
+        engine.toggleStartPause();
+      },
+    });
+
+    this.addCommand({
+      id: "toggle-zen-focus-mode",
+      name: "Toggle distraction-free focus mode",
+      callback: async () => {
+        await this.activateCockpitView(true);
+      },
+    });
+
     this.app.workspace.onLayoutReady(() => {
       void this.settingsReady.then(() =>
         reconcileMobileInbox(this.app, this.settings, (dk) => this.ensureNoteForDate(dk)).then(
@@ -138,6 +165,7 @@ export default class LifeOSPlugin extends Plugin {
     });
 
     const statusEl = this.addStatusBarItem();
+    this.statusEl = statusEl;
     statusEl.addClass("lifeos-status-pill");
     statusEl.setText("Life OS: Cockpit");
     statusEl.setAttribute("role", "button");
@@ -156,16 +184,83 @@ export default class LifeOSPlugin extends Plugin {
 
   onunload(): void {
     document.body.removeClass("life-os-glassmorphic");
+    if (this.unsubscribeStatus) {
+      this.unsubscribeStatus();
+      this.unsubscribeStatus = null;
+    }
+    this.pomodoroEngine?.destroy();
+    this.pomodoroEngine = null;
+  }
+
+  private updateStatusBarPill(snap?: PomodoroSnapshot): void {
+    if (!this.statusEl) return;
+    if (!snap || snap.status === "idle") {
+      this.statusEl.removeClass("is-focus-running", "is-focus-paused");
+      this.statusEl.setText("Life OS: Cockpit");
+      return;
+    }
+    const clock = formatMMSS(snap.remainingSeconds);
+    const phaseGlyph = snap.phase === "work" ? "🍅" : "☕";
+    const statusPrefix = snap.status === "paused" ? "⏸" : phaseGlyph;
+    const labelSuffix = snap.targetTitle ? ` · ${snap.targetTitle.slice(0, 18)}` : "";
+    this.statusEl.toggleClass("is-focus-running", snap.status === "running");
+    this.statusEl.toggleClass("is-focus-paused", snap.status === "paused");
+    this.statusEl.setText(`${statusPrefix} ${clock}${labelSuffix}`);
+  }
+
+  ensurePomodoroEngine(): PomodoroEngine {
+    if (!this.pomodoroEngine) {
+      this.pomodoroEngine = new PomodoroEngine(
+        () => this.settings.pomodoro,
+        async (payload) => {
+          if (payload.phase === "work") {
+            const summary = await logFocusToDailyNote(
+              this.app,
+              this.settings,
+              () => this.ensureTodayNote(),
+              payload.elapsedMinutes,
+              1,
+              payload.targetTitle,
+              payload.startedAtMs,
+              payload.endedAtMs
+            );
+            new Notice(
+              `Focus session complete (+${payload.elapsedMinutes}m · ${summary.totalMinutes}m today)`
+            );
+          } else {
+            new Notice("Break complete. Ready for next focus sprint.");
+          }
+          await this.refreshOpenCockpitViews();
+        }
+      );
+      this.unsubscribeStatus = this.pomodoroEngine.subscribe((snap) => {
+        this.updateStatusBarPill(snap);
+      });
+    }
+    return this.pomodoroEngine;
+  }
+
+  async refreshOpenCockpitViews(): Promise<void> {
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_LIFE_OS);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof LifeOSCockpitView) {
+        await leaf.view.refreshView();
+      }
+    }
   }
 
   applyThemePreferences(): void {
     document.body.toggleClass("life-os-glassmorphic", this.settings.glassmorphism !== false);
   }
 
-  async activateCockpitView(): Promise<void> {
+  async activateCockpitView(toggleZenFocus = false): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_LIFE_OS);
     if (existing.length > 0) {
-      await this.app.workspace.revealLeaf(existing[0]!);
+      const targetLeaf = existing[0]!;
+      await this.app.workspace.revealLeaf(targetLeaf);
+      if (toggleZenFocus && targetLeaf.view instanceof LifeOSCockpitView) {
+        await targetLeaf.view.toggleZenFocusMode();
+      }
       return;
     }
     const leaf = this.app.workspace.getLeaf("tab");
@@ -174,6 +269,9 @@ export default class LifeOSPlugin extends Plugin {
       leaf.setPinned(true);
     }
     await this.app.workspace.revealLeaf(leaf);
+    if (toggleZenFocus && leaf.view instanceof LifeOSCockpitView) {
+      await leaf.view.toggleZenFocusMode(true);
+    }
   }
 
   async ensureTodayNote(): Promise<TFile> {
@@ -261,6 +359,7 @@ export default class LifeOSPlugin extends Plugin {
     const raw = ((await this.loadData()) ?? {}) as Partial<LifeOSSettings>;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
     this.settings.prayer = Object.assign({}, DEFAULT_SETTINGS.prayer, raw.prayer ?? {});
+    this.settings.pomodoro = Object.assign({}, DEFAULT_SETTINGS.pomodoro, raw.pomodoro ?? {});
     if (!Array.isArray(this.settings.customHabits) || this.settings.customHabits.length === 0) {
       this.settings.customHabits = [...DEFAULT_SETTINGS.customHabits];
     }
@@ -269,6 +368,7 @@ export default class LifeOSPlugin extends Plugin {
   async saveSettings(): Promise<void> {
     await this.settingsReady;
     await this.saveData(this.settings);
+    this.pomodoroEngine?.syncSettingsDefaultsIfIdle();
   }
 
   exportSuperProductivity = exportToSuperProductivityJSON;
@@ -449,6 +549,100 @@ class LifeOSSettingTab extends PluginSettingTab {
             this.plugin.settings.prayer.longitude = n;
             await this.plugin.saveSettings();
           }
+        })
+      );
+
+    new Setting(containerEl).setName("Pomodoro & focus timer").setHeading();
+
+    new Setting(containerEl)
+      .setName("Focus duration (minutes)")
+      .setDesc("Length of each work sprint (1–180 minutes).")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.pomodoro.workMinutes)).onChange(async (val) => {
+          const n = Math.round(Number(val));
+          if (!Number.isNaN(n) && n >= 1 && n <= 180) {
+            this.plugin.settings.pomodoro.workMinutes = n;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Short break (minutes)")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.pomodoro.shortBreakMinutes)).onChange(async (val) => {
+          const n = Math.round(Number(val));
+          if (!Number.isNaN(n) && n >= 1 && n <= 60) {
+            this.plugin.settings.pomodoro.shortBreakMinutes = n;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Long break (minutes)")
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.pomodoro.longBreakMinutes)).onChange(async (val) => {
+          const n = Math.round(Number(val));
+          if (!Number.isNaN(n) && n >= 1 && n <= 90) {
+            this.plugin.settings.pomodoro.longBreakMinutes = n;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Daily focus goal (minutes)")
+      .setDesc("Goal target line displayed on the Focus Minutes chart and progress bar.")
+      .addText((t) =>
+        t
+          .setValue(String(this.plugin.settings.pomodoro.dailyFocusTargetMinutes))
+          .onChange(async (val) => {
+            const n = Math.round(Number(val));
+            if (!Number.isNaN(n) && n >= 10 && n <= 720) {
+              this.plugin.settings.pomodoro.dailyFocusTargetMinutes = n;
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Play completion chime")
+      .setDesc("Play a soft gentle chime when a focus sprint or break ends.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.pomodoro.soundEnabled).onChange(async (val) => {
+          this.plugin.settings.pomodoro.soundEnabled = val;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Log completed sessions to timeline")
+      .setDesc("Automatically append finished focus sprints to today's Timeline section.")
+      .addToggle((t) =>
+        t
+          .setValue(this.plugin.settings.pomodoro.logTimeblockOnComplete)
+          .onChange(async (val) => {
+            this.plugin.settings.pomodoro.logTimeblockOnComplete = val;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Auto-start breaks")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.pomodoro.autoStartBreaks).onChange(async (val) => {
+          this.plugin.settings.pomodoro.autoStartBreaks = val;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Auto-start next focus session")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.pomodoro.autoStartWork).onChange(async (val) => {
+          this.plugin.settings.pomodoro.autoStartWork = val;
+          await this.plugin.saveSettings();
         })
       );
   }

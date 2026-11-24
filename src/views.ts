@@ -24,6 +24,8 @@ import {
 import { renderInteractiveChart } from "./core/chartjs-renderer";
 import { computeNextRecurringDate, parseNaturalLanguageTask } from "./core/task-nlp";
 import { formatMinutesHHMM, parseTimeMinutes, snapMinutes } from "./core/timeline-layout";
+import { formatMinutesCompact, logFocusToDailyNote } from "./core/pomodoro-engine";
+import { renderCompactFocusBar, renderZenFocusView, type FocusBarHost } from "./ui/pomodoro-bar";
 import { renderScheduleView, type ScheduleSubMode } from "./ui/schedule-planner";
 import {
   addTaskToDailyNote,
@@ -58,6 +60,7 @@ export class LifeOSCockpitView extends ItemView {
   private activeTab: CockpitTab = "cockpit";
   private scheduleSubMode: ScheduleSubMode = "day";
   private fullDayHours = false;
+  private zenFocusMode = false;
   private selectedDateKey: string = todayDMY();
   private calendarYear: number = new Date().getFullYear();
   private calendarMonth: number = new Date().getMonth();
@@ -69,6 +72,7 @@ export class LifeOSCockpitView extends ItemView {
   private isMutatingTasks = false;
   private saveTimer: number | null = null;
   private countdownTimer: number | null = null;
+  private unsubscribeFocusBar: (() => void) | null = null;
   private activeCharts: Chart[] = [];
 
   constructor(leaf: WorkspaceLeaf, plugin: LifeOSPlugin) {
@@ -141,9 +145,54 @@ export class LifeOSCockpitView extends ItemView {
       window.clearInterval(this.countdownTimer);
       this.countdownTimer = null;
     }
+    this.cleanupFocusBar();
     this.taskIndex?.clear();
     this.taskIndex = null;
     this.destroyActiveCharts();
+  }
+
+  private cleanupFocusBar(): void {
+    if (this.unsubscribeFocusBar) {
+      this.unsubscribeFocusBar();
+      this.unsubscribeFocusBar = null;
+    }
+  }
+
+  async toggleZenFocusMode(force?: boolean): Promise<void> {
+    this.zenFocusMode = force !== undefined ? force : !this.zenFocusMode;
+    if (this.zenFocusMode) {
+      this.activeTab = "cockpit";
+    }
+    await this.refreshView();
+  }
+
+  private buildFocusHost(todayNote: ParsedDailyNote, openTasks?: TaskItem[]): FocusBarHost {
+    return {
+      engine: this.plugin.ensurePomodoroEngine(),
+      todayMinutes: todayNote.focusMinutes,
+      todaySessions: todayNote.focusSessions,
+      dailyGoalMinutes: this.plugin.settings.pomodoro.dailyFocusTargetMinutes,
+      availableTasks: openTasks ?? todayNote.tasks,
+      isZenMode: this.zenFocusMode,
+      onToggleZenMode: () => {
+        void this.toggleZenFocusMode();
+      },
+      onQuickLogMinutes: async (minutes, label) => {
+        const now = Date.now();
+        const res = await logFocusToDailyNote(
+          this.app,
+          this.plugin.settings,
+          () => this.plugin.ensureTodayNote(),
+          minutes,
+          1,
+          label,
+          now - minutes * 60_000,
+          now
+        );
+        new Notice(`Logged +${minutes}m focus (${res.totalMinutes}m today)`);
+        await this.refreshView();
+      },
+    };
   }
 
   private destroyActiveCharts(): void {
@@ -200,6 +249,7 @@ export class LifeOSCockpitView extends ItemView {
   }
 
   async refreshView(): Promise<void> {
+    this.cleanupFocusBar();
     this.destroyActiveCharts();
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
@@ -209,7 +259,31 @@ export class LifeOSCockpitView extends ItemView {
     this.renderTopBar(root);
 
     if (this.activeTab === "cockpit") {
+      if (this.zenFocusMode) {
+        const todayKey = todayDMY();
+        const todayNote =
+          this.selectedDateKey === todayKey
+            ? await this.loadSelectedNote()
+            : await this.readNoteIfExists(todayKey);
+        if (this.selectedDateKey === todayKey) {
+          this.currentNote = todayNote;
+        }
+        this.unsubscribeFocusBar = renderZenFocusView(root, this.buildFocusHost(todayNote));
+        return;
+      }
+
       this.currentNote = await this.loadSelectedNote();
+      if (this.plugin.settings.studyTracking) {
+        const todayKey = todayDMY();
+        const todayNote =
+          this.selectedDateKey === todayKey
+            ? this.currentNote
+            : await this.readNoteIfExists(todayKey);
+        this.unsubscribeFocusBar = renderCompactFocusBar(
+          root,
+          this.buildFocusHost(todayNote, this.currentNote.tasks)
+        );
+      }
       this.renderCockpitTab(root, this.currentNote);
     } else if (this.activeTab === "tasks") {
       await this.renderTasksTab(root);
@@ -236,6 +310,7 @@ export class LifeOSCockpitView extends ItemView {
       cls: "life-os-date-title",
     });
     titleEl.addEventListener("click", () => {
+      this.zenFocusMode = false;
       this.activeTab = "calendar";
       void this.refreshView();
     });
@@ -263,6 +338,9 @@ export class LifeOSCockpitView extends ItemView {
         cls: `life-os-mode-tab ${this.activeTab === def.id ? "is-active" : ""}`,
       });
       btn.addEventListener("click", () => {
+        if (def.id !== "cockpit") {
+          this.zenFocusMode = false;
+        }
         this.activeTab = def.id;
         void this.refreshView();
       });
@@ -731,6 +809,15 @@ export class LifeOSCockpitView extends ItemView {
     }
     const entries = await this.taskIndex.scan(this.app, this.plugin.settings);
 
+    if (this.plugin.settings.studyTracking) {
+      const todayNote = await this.readNoteIfExists(todayDMY());
+      const openTasks = entries.filter((e) => !e.task.done).map((e) => e.task);
+      this.unsubscribeFocusBar = renderCompactFocusBar(
+        root,
+        this.buildFocusHost(todayNote, openTasks)
+      );
+    }
+
     const runTaskMutation = async (fn: () => Promise<void>): Promise<void> => {
       this.isMutatingTasks = true;
       try {
@@ -810,6 +897,10 @@ export class LifeOSCockpitView extends ItemView {
       },
       onScheduleTask: async (entry) => {
         await this.scheduleTaskTitleOnDate(entry.task.title, todayDMY());
+      },
+      onStartFocus: (entry) => {
+        this.plugin.ensurePomodoroEngine().start("work", entry.task.title, entry.task.id);
+        new Notice(`Started focus timer: "${entry.task.title}"`);
       },
       onDeleteTask: async (entry) => {
         await runTaskMutation(async () => {
@@ -949,6 +1040,14 @@ export class LifeOSCockpitView extends ItemView {
       }
 
       if (!task.done) {
+        const focusBtn = row.createEl("button", { text: "🍅", cls: "life-os-btn-subtle life-os-btn-mini" });
+        focusBtn.setAttr("aria-label", "Start Pomodoro focus on this task");
+        focusBtn.setAttr("title", "Start Pomodoro focus session");
+        focusBtn.addEventListener("click", () => {
+          this.plugin.ensurePomodoroEngine().start("work", task.title, task.id);
+          new Notice(`Started focus timer: "${task.title}"`);
+        });
+
         const schedBtn = row.createEl("button", { text: "⏱", cls: "life-os-btn-subtle life-os-btn-mini" });
         schedBtn.setAttr("aria-label", "Schedule task onto today's timeline");
         schedBtn.setAttr("title", "Schedule 1h block on timeline");
@@ -1101,6 +1200,8 @@ export class LifeOSCockpitView extends ItemView {
       waterGlasses: 0,
       waterBottles: 0,
       waterLiters: 0,
+      focusMinutes: 0,
+      focusSessions: 0,
       prayers: PRAYER_NAMES.map((name) => ({ name, time: times[name], status: "", done: false })),
       habits: this.plugin.settings.customHabits.map((name) => ({ name, done: false })),
       tasks: [],
@@ -1187,7 +1288,7 @@ export class LifeOSCockpitView extends ItemView {
     );
     const agg = computeAggregateStats(summaries);
 
-    // 4 KPI Cards
+    // 5 KPI Cards
     const kpiGrid = root.createDiv({ cls: "life-os-kpi-grid" });
     const kpis: Array<{ label: string; value: string; sub: string; cls: string }> = [
       {
@@ -1201,6 +1302,12 @@ export class LifeOSCockpitView extends ItemView {
         value: `${agg.avgWaterLiters.toFixed(2)} L`,
         sub: `Goal: ${this.plugin.settings.waterTargetLiters}L/day`,
         cls: "life-os-accent-water",
+      },
+      {
+        label: "Focus time",
+        value: formatMinutesCompact(agg.totalFocusMinutes),
+        sub: `Avg: ${agg.avgFocusMinutes}m/d · ${agg.totalFocusSessions} sessions`,
+        cls: "life-os-accent-focus",
       },
       {
         label: "Prayer Consistency",
@@ -1263,6 +1370,24 @@ export class LifeOSCockpitView extends ItemView {
       getValue: (d) => (d.exists ? d.prayersDone : null),
     });
     this.activeCharts.push(prayerChart);
+
+    const focusPeak = Math.max(
+      this.plugin.settings.pomodoro.dailyFocusTargetMinutes + 30,
+      ...summaries.map((d) => d.focusMinutes),
+      60
+    );
+    const focusChartCard = chartsGrid.createDiv({ cls: "life-os-card life-os-accent-focus" });
+    focusChartCard.createDiv({ text: "Focus minutes trend (target dashed)", cls: "life-os-card-title" });
+    const focusChart = renderInteractiveChart(focusChartCard, summaries, {
+      label: "Focus",
+      unit: "m",
+      maxValue: focusPeak,
+      targetValue: this.plugin.settings.pomodoro.dailyFocusTargetMinutes,
+      barColor: "rgba(244, 63, 94, 0.78)",
+      targetLineColor: "rgba(245, 158, 11, 0.9)",
+      getValue: (d) => (d.exists ? d.focusMinutes : null),
+    });
+    this.activeCharts.push(focusChart);
 
     // Quick Export Footer
     const exportRow = root.createDiv({ cls: "life-os-card life-os-export-row" });

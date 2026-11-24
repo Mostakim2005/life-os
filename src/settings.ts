@@ -29,4 +29,15 @@ export const DEFAULT_SETTINGS: LifeOSSettings = {
   emitTasksEmojiSyntax: true,
   emitDayPlannerBlocks: true,
   glassmorphism: true,
+  pomodoro: {
+    workMinutes: 25,
+    shortBreakMinutes: 5,
+    longBreakMinutes: 15,
+    longBreakInterval: 4,
+    autoStartBreaks: false,
+    autoStartWork: false,
+    soundEnabled: true,
+    logTimeblockOnComplete: true,
+    dailyFocusTargetMinutes: 120,
+  },
 };

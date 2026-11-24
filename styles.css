@@ -2046,3 +2046,318 @@ body.life-os-glassmorphic .life-os-reflection-input:focus {
   color: var(--text-normal);
   border-color: var(--interactive-accent);
 }
+
+/* ============================================================
+   Phase 3: Built-In Pomodoro & Distraction-Free Focus Bar
+   ============================================================ */
+.life-os-accent-focus {
+  border-top: 3px solid #f43f5e !important;
+}
+
+.life-os-fill-focus {
+  background: linear-gradient(90deg, #e11d48, #fb7185);
+}
+
+.lifeos-status-pill.is-focus-running {
+  color: var(--text-normal);
+  background: color-mix(in srgb, #f43f5e 16%, var(--background-secondary));
+  border-color: color-mix(in srgb, #f43f5e 45%, var(--background-modifier-border));
+  font-weight: 600;
+}
+
+.lifeos-status-pill.is-focus-paused {
+  color: var(--text-normal);
+  background: color-mix(in srgb, #f59e0b 16%, var(--background-secondary));
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--background-modifier-border));
+}
+
+.life-os-pomo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-left: 3px solid #f43f5e;
+}
+
+.life-os-pomo-bar.is-running {
+  border-color: color-mix(in srgb, #f43f5e 45%, var(--background-modifier-border));
+  background: color-mix(in srgb, #f43f5e 8%, var(--background-secondary));
+}
+
+.life-os-pomo-bar.is-break.is-running {
+  border-left-color: #10b981;
+  border-color: color-mix(in srgb, #10b981 45%, var(--background-modifier-border));
+  background: color-mix(in srgb, #10b981 8%, var(--background-secondary));
+}
+
+.life-os-pomo-bar.is-paused {
+  border-left-color: #f59e0b;
+}
+
+.life-os-pomo-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.life-os-pomo-phase-pill {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.life-os-pomo-phase-pill:hover {
+  border-color: var(--interactive-accent);
+}
+
+.life-os-pomo-clock-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 68px;
+}
+
+.life-os-pomo-clock {
+  font-size: 1.08rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-normal);
+}
+
+.life-os-pomo-mini-track {
+  width: 68px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--background-primary);
+  overflow: hidden;
+}
+
+.life-os-pomo-mini-fill {
+  height: 100%;
+  width: 0%;
+  background: #f43f5e;
+  transition: width 0.25s linear;
+}
+
+.life-os-pomo-bar.is-break .life-os-pomo-mini-fill {
+  background: #10b981;
+}
+
+.life-os-pomo-target-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.life-os-pomo-target-input {
+  min-width: 140px;
+}
+
+.life-os-pomo-task-select {
+  max-width: 170px;
+}
+
+.life-os-pomo-controls,
+.life-os-pomo-stats-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.life-os-pomo-today-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.is-hidden {
+  display: none !important;
+}
+
+/* Distraction-Free Zen Focus Mode */
+.life-os-zen-shell {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 28px;
+}
+
+.life-os-zen-card {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--life-os-glass-shadow-md);
+}
+
+.life-os-zen-card.is-running {
+  border-color: color-mix(in srgb, #f43f5e 45%, var(--background-modifier-border));
+}
+
+.life-os-zen-card.is-break.is-running {
+  border-color: color-mix(in srgb, #10b981 45%, var(--background-modifier-border));
+}
+
+.life-os-zen-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.life-os-zen-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.life-os-zen-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.life-os-zen-phases {
+  align-self: center;
+}
+
+.life-os-zen-ring-wrap {
+  position: relative;
+  width: 210px;
+  height: 210px;
+  margin: 4px auto;
+}
+
+.life-os-zen-ring-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.life-os-zen-ring-track {
+  fill: none;
+  stroke: var(--background-primary);
+  stroke-width: 10;
+}
+
+.life-os-zen-ring-prog {
+  fill: none;
+  stroke: #f43f5e;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.35s linear, stroke 0.2s ease;
+}
+
+.life-os-zen-card.is-break .life-os-zen-ring-prog {
+  stroke: #10b981;
+}
+
+.life-os-zen-card.is-paused .life-os-zen-ring-prog {
+  stroke: #f59e0b;
+}
+
+.life-os-zen-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.life-os-zen-clock {
+  font-size: 2.55rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-normal);
+}
+
+.life-os-zen-substatus {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.life-os-zen-target-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.life-os-zen-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.life-os-zen-main-btn {
+  padding: 6px 20px;
+  font-weight: 600;
+}
+
+.life-os-zen-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.life-os-zen-foot-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.life-os-zen-manual-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 780px) {
+  .life-os-pomo-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .life-os-pomo-target-wrap {
+    min-width: 0;
+  }
+  .life-os-pomo-task-select {
+    max-width: none;
+    flex: 1;
+  }
+}

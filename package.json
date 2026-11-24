@@ -1,6 +1,6 @@
 {
   "name": "life-os",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Personal cockpit powered by adhan-js, DD-MM-YYYY daily notes, Obsidian ecosystem interop, and Super Productivity / Loop bridges.",
   "main": "main.js",
   "type": "module",
