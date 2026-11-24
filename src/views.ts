@@ -1,7 +1,7 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf, normalizePath } from "obsidian";
 import type { Chart } from "chart.js";
 import type LifeOSPlugin from "./main";
-import type { ParsedDailyNote, PrayerStatus, TaskPriority, WaterUnit } from "./types";
+import type { ParsedDailyNote, PrayerStatus, TaskItem, TaskPriority, TimelineBlock, WaterUnit } from "./types";
 import { formatDateDMY, parseAnyDateKey, todayDMY, toISOKey } from "./core/date-format";
 import {
   applyParsedNoteToMarkdown,
@@ -25,10 +25,23 @@ import { renderInteractiveChart } from "./core/chartjs-renderer";
 import { computeNextRecurringDate, parseNaturalLanguageTask } from "./core/task-nlp";
 import { formatMinutesHHMM, parseTimeMinutes, snapMinutes } from "./core/timeline-layout";
 import { renderScheduleView, type ScheduleSubMode } from "./ui/schedule-planner";
+import {
+  addTaskToDailyNote,
+  cycleVaultTaskPriority,
+  deleteVaultTask,
+  postponeVaultTask,
+  toggleVaultTask,
+  VaultTaskIndex,
+} from "./core/vault-task-index";
+import {
+  createDefaultTasksHubState,
+  renderTasksHub,
+  type TasksHubState,
+} from "./ui/tasks-hub";
 
 export const VIEW_TYPE_LIFE_OS = "life-os-cockpit-view";
 
-type CockpitTab = "cockpit" | "calendar" | "stats";
+type CockpitTab = "cockpit" | "tasks" | "calendar" | "stats";
 type TaskFilter = "all" | "open" | "done";
 
 const SLEEP_PRESETS = [5, 6, 6.5, 7, 7.5, 8, 8.5, 9];
@@ -51,6 +64,9 @@ export class LifeOSCockpitView extends ItemView {
   private statsWindowDays: 7 | 30 = 7;
   private taskFilter: TaskFilter = "all";
   private currentNote: ParsedDailyNote | null = null;
+  private taskIndex: VaultTaskIndex | null = null;
+  private tasksHubState: TasksHubState = createDefaultTasksHubState();
+  private isMutatingTasks = false;
   private saveTimer: number | null = null;
   private countdownTimer: number | null = null;
   private activeCharts: Chart[] = [];
@@ -78,7 +94,32 @@ export class LifeOSCockpitView extends ItemView {
     }
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
-        if (file instanceof TFile && file.basename === this.selectedDateKey && this.saveTimer === null) {
+        if (!(file instanceof TFile)) return;
+        this.taskIndex?.invalidate(file.path);
+        if (this.activeTab === "tasks") {
+          if (!this.isMutatingTasks && this.saveTimer === null) {
+            void this.refreshView();
+          }
+          return;
+        }
+        if (file.basename === this.selectedDateKey && this.saveTimer === null) {
+          void this.refreshView();
+        }
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        this.taskIndex?.invalidate(file.path);
+        if (!this.isMutatingTasks && this.activeTab === "tasks") {
+          void this.refreshView();
+        }
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        this.taskIndex?.invalidate(oldPath);
+        this.taskIndex?.invalidate(file.path);
+        if (!this.isMutatingTasks && this.activeTab === "tasks") {
           void this.refreshView();
         }
       })
@@ -100,6 +141,8 @@ export class LifeOSCockpitView extends ItemView {
       window.clearInterval(this.countdownTimer);
       this.countdownTimer = null;
     }
+    this.taskIndex?.clear();
+    this.taskIndex = null;
     this.destroyActiveCharts();
   }
 
@@ -168,6 +211,8 @@ export class LifeOSCockpitView extends ItemView {
     if (this.activeTab === "cockpit") {
       this.currentNote = await this.loadSelectedNote();
       this.renderCockpitTab(root, this.currentNote);
+    } else if (this.activeTab === "tasks") {
+      await this.renderTasksTab(root);
     } else if (this.activeTab === "calendar") {
       await this.renderCalendarTab(root);
     } else {
@@ -208,6 +253,7 @@ export class LifeOSCockpitView extends ItemView {
     const tabs = bar.createDiv({ cls: "life-os-mode-tabs" });
     const tabDefs: Array<{ id: CockpitTab; label: string }> = [
       { id: "cockpit", label: "Cockpit" },
+      { id: "tasks", label: "Tasks" },
       { id: "calendar", label: "Schedule & Calendar" },
       { id: "stats", label: "Stats & Tracker" },
     ];
@@ -625,12 +671,168 @@ export class LifeOSCockpitView extends ItemView {
     }
   }
 
+  private findNextOpenTimelineSlot(timeline: TimelineBlock[]): { startTime: string; endTime: string } {
+    const sorted = timeline
+      .map((b) => ({
+        s: parseTimeMinutes(b.startTime),
+        e: Math.max(parseTimeMinutes(b.startTime) + 15, parseTimeMinutes(b.endTime)),
+      }))
+      .sort((a, b) => a.s - b.s);
+    const now = new Date();
+    let startMin = snapMinutes(Math.max(9 * 60, now.getHours() * 60 + now.getMinutes()), 15);
+    for (const b of sorted) {
+      if (startMin + 60 <= b.s) break;
+      if (startMin < b.e) startMin = snapMinutes(b.e, 15);
+    }
+    if (startMin + 60 > 23 * 60 + 45) startMin = 22 * 60;
+    return {
+      startTime: formatMinutesHHMM(startMin),
+      endTime: formatMinutesHHMM(startMin + 60),
+    };
+  }
+
+  private async scheduleTaskTitleOnDate(title: string, targetDateKey: string): Promise<void> {
+    if (targetDateKey === this.selectedDateKey && this.currentNote && this.activeTab === "cockpit") {
+      const { startTime, endTime } = this.findNextOpenTimelineSlot(this.currentNote.timeline);
+      this.currentNote.timeline.push({
+        id: `blk-${Date.now()}`,
+        startTime,
+        endTime,
+        title,
+        done: false,
+      });
+      new Notice(`Scheduled "${title}" (${startTime}–${endTime})`);
+      await this.persistCurrentNote(true);
+      return;
+    }
+
+    const file = await this.plugin.ensureNoteForDate(targetDateKey);
+    let scheduledLabel = "";
+    await this.app.vault.process(file, (content) => {
+      const parsed = parseDailyNote(content, targetDateKey, this.plugin.settings);
+      const { startTime, endTime } = this.findNextOpenTimelineSlot(parsed.timeline);
+      scheduledLabel = `${startTime}–${endTime}`;
+      parsed.timeline.push({
+        id: `blk-${Date.now()}`,
+        startTime,
+        endTime,
+        title,
+        done: false,
+      });
+      return applyParsedNoteToMarkdown(content, parsed, this.plugin.settings);
+    });
+    this.taskIndex?.invalidate(file.path);
+    new Notice(`Scheduled "${title}" on ${targetDateKey} (${scheduledLabel})`);
+  }
+
+  private async renderTasksTab(root: HTMLElement): Promise<void> {
+    if (!this.taskIndex) {
+      this.taskIndex = new VaultTaskIndex();
+    }
+    const entries = await this.taskIndex.scan(this.app, this.plugin.settings);
+
+    const runTaskMutation = async (fn: () => Promise<void>): Promise<void> => {
+      this.isMutatingTasks = true;
+      try {
+        await fn();
+      } finally {
+        this.isMutatingTasks = false;
+      }
+      await this.refreshView();
+    };
+
+    renderTasksHub(root, entries, {
+      state: this.tasksHubState,
+      onRefresh: async () => {
+        this.taskIndex?.clear();
+        await this.refreshView();
+      },
+      onAddTask: async (rawInput) => {
+        await runTaskMutation(async () => {
+          let prio: TaskPriority = "none";
+          let cleaned = rawInput.trim();
+          if (/[⏫🔺]/u.test(cleaned)) {
+            prio = "high";
+            cleaned = cleaned.replace(/[⏫🔺]/gu, "");
+          } else if (cleaned.includes("🔼")) {
+            prio = "medium";
+            cleaned = cleaned.replace(/🔼/g, "");
+          } else if (/[🔽⏬]/u.test(cleaned)) {
+            prio = "low";
+            cleaned = cleaned.replace(/[🔽⏬]/gu, "");
+          }
+
+          const { title, dueDateIso, recurrence } = parseNaturalLanguageTask(cleaned, new Date());
+          if (!title) return;
+
+          const todayIso = toISOKey(todayDMY()) ?? undefined;
+          const newTask: TaskItem = {
+            id: `task-${Date.now()}`,
+            title,
+            done: false,
+            priority: prio,
+            dueDateIso: dueDateIso ?? (this.tasksHubState.bucket === "today" ? todayIso : undefined),
+            recurrence,
+          };
+          const file = await addTaskToDailyNote(
+            this.app,
+            this.plugin.settings,
+            (k) => this.plugin.ensureNoteForDate(k),
+            newTask
+          );
+          this.taskIndex?.invalidate(file.path);
+          new Notice(`Added task to ${file.basename}`);
+        });
+      },
+      onToggleTask: async (entry) => {
+        await runTaskMutation(async () => {
+          const res = await toggleVaultTask(this.app, entry);
+          this.taskIndex?.invalidate(entry.filePath);
+          if (res.nextDueIso) {
+            new Notice(`Scheduled next recurrence (${res.nextDueIso})`);
+          }
+        });
+      },
+      onCyclePriority: async (entry) => {
+        await runTaskMutation(async () => {
+          await cycleVaultTaskPriority(this.app, entry);
+          this.taskIndex?.invalidate(entry.filePath);
+        });
+      },
+      onPostponeTask: async (entry) => {
+        await runTaskMutation(async () => {
+          const nextIso = await postponeVaultTask(this.app, entry, 1);
+          this.taskIndex?.invalidate(entry.filePath);
+          if (nextIso) {
+            new Notice(`Postponed to ${nextIso}`);
+          }
+        });
+      },
+      onScheduleTask: async (entry) => {
+        await this.scheduleTaskTitleOnDate(entry.task.title, todayDMY());
+      },
+      onDeleteTask: async (entry) => {
+        await runTaskMutation(async () => {
+          await deleteVaultTask(this.app, entry);
+          this.taskIndex?.invalidate(entry.filePath);
+        });
+      },
+      onOpenFile: async (filePath) => {
+        const file = this.app.vault.getFileByPath(normalizePath(filePath));
+        if (file) {
+          await this.app.workspace.getLeaf("split").openFile(file);
+        }
+      },
+    });
+  }
+
   private renderTasksPane(parent: HTMLElement, note: ParsedDailyNote): void {
     const pane = parent.createDiv({ cls: "life-os-pane life-os-accent-tasks" });
     const header = pane.createDiv({ cls: "life-os-pane-header" });
     header.createDiv({ text: "Tasks", cls: "life-os-pane-title" });
 
-    const filters = header.createDiv({ cls: "life-os-segmented" });
+    const headerRight = header.createDiv({ cls: "life-os-pane-header-right" });
+    const filters = headerRight.createDiv({ cls: "life-os-segmented" });
     for (const f of ["all", "open", "done"] as TaskFilter[]) {
       const btn = filters.createEl("button", {
         text: f[0]!.toUpperCase() + f.slice(1),
@@ -641,6 +843,15 @@ export class LifeOSCockpitView extends ItemView {
         void this.refreshView();
       });
     }
+    const allTasksBtn = headerRight.createEl("button", {
+      text: "All tasks ↗",
+      cls: "life-os-btn-subtle",
+    });
+    allTasksBtn.setAttr("title", "Open vault-wide Tasks hub");
+    allTasksBtn.addEventListener("click", () => {
+      this.activeTab = "tasks";
+      void this.refreshView();
+    });
 
     // Quick-add task bar
     const addBar = pane.createDiv({ cls: "life-os-quick-bar" });
@@ -730,6 +941,9 @@ export class LifeOSCockpitView extends ItemView {
       if (task.recurrence) {
         row.createSpan({ text: `🔁 ${task.recurrence}`, cls: "life-os-task-recurrence" });
       }
+      if (task.scheduledDateIso) {
+        row.createSpan({ text: `⏳ ${task.scheduledDateIso}`, cls: "life-os-task-due" });
+      }
       if (task.dueDateIso) {
         row.createSpan({ text: task.dueDateIso, cls: "life-os-task-due" });
       }
@@ -739,21 +953,7 @@ export class LifeOSCockpitView extends ItemView {
         schedBtn.setAttr("aria-label", "Schedule task onto today's timeline");
         schedBtn.setAttr("title", "Schedule 1h block on timeline");
         schedBtn.addEventListener("click", () => {
-          const sorted = note.timeline
-            .map((b) => ({
-              s: parseTimeMinutes(b.startTime),
-              e: Math.max(parseTimeMinutes(b.startTime) + 15, parseTimeMinutes(b.endTime)),
-            }))
-            .sort((a, b) => a.s - b.s);
-          const now = new Date();
-          let startMin = snapMinutes(Math.max(9 * 60, now.getHours() * 60 + now.getMinutes()), 15);
-          for (const b of sorted) {
-            if (startMin + 60 <= b.s) break;
-            if (startMin < b.e) startMin = snapMinutes(b.e, 15);
-          }
-          if (startMin + 60 > 23 * 60 + 45) startMin = 22 * 60;
-          const startTime = formatMinutesHHMM(startMin);
-          const endTime = formatMinutesHHMM(startMin + 60);
+          const { startTime, endTime } = this.findNextOpenTimelineSlot(note.timeline);
           note.timeline.push({
             id: `blk-${Date.now()}`,
             startTime,

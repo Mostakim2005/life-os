@@ -1,7 +1,7 @@
 {
 	"id": "life-os",
 	"name": "Life OS",
-	"version": "2.1.0",
+	"version": "2.2.0",
 	"minAppVersion": "1.7.2",
 	"description": "High-density personal cockpit for prayer, sleep, water, exercise, study, tasks, and habits with companion plugin interoperability.",
 	"author": "Mostakim2005",

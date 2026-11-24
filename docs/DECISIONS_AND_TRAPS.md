@@ -50,3 +50,13 @@
 > **1-Line Summary:** Built Phase 1 Day Timeline and Week Grid in pure TypeScript (`src/core/timeline-layout.ts`, `src/ui/schedule-planner.ts`) rather than importing React/Svelte/FullCalendar, and moved `chart.js`, `chrono-node`, and `rrule` behind on-demand `require()` thunks so Obsidian startup stays <15 ms.
 * **Decision Maker:** `[DECIDED BY: HUMAN]`
 * **Protected Code Anchors (Grep Targets):** `src/core/chartjs-renderer.ts` -> `getChartConstructor`, `src/core/task-nlp.ts` -> `getChrono`, `src/core/timeline-layout.ts` -> `computeOverlapLayout`
+
+### [DECISION: Lazy-Mtime-Vault-Task-Index] | Aliases: vault tasks scan, lazy task index, startup zero cost
+> **1-Line Summary:** Deferred vault-wide Markdown task scanning completely out of `onload()` into an on-demand `VaultTaskIndex` instantiated only when opening the `Tasks` tab, using per-file `mtime` caching and skipping fenced code blocks and daily-note `## Prayers` / `## Habits` / `## Timeline` sections.
+* **Decision Maker:** `[DECIDED BY: HUMAN]`
+* **Protected Code Anchors (Grep Targets):** `src/core/vault-task-index.ts` -> `VaultTaskIndex.scan`, `src/views.ts` -> `LifeOSCockpitView.renderTasksTab`
+
+### [TRAP: Task-Line-In-Place-Mutation-And-Emoji-Ordering] | Aliases: recurrence regex swallow, stale line number mutation
+> **1-Line Summary:** Two task-mutation hazards: recurrence regexes must exclude `⏳`/`🛫`/`📅`/`✅` so trailing dates are not captured into `recurrence`, and direct vault line edits must re-verify line identity against `rawLine`/title inside `app.vault.process` instead of trusting potentially stale line indices.
+* **Strict Rule:** Always parse `🛫`, `⏳`, `📅`, `✅`, and priority emojis before matching `🔁` (and exclude them from its character class), and always resolve target task indices via `findMatchingLineIndex` inside `app.vault.process`.
+* **Protected Code Anchors (Grep Targets):** `src/core/note-parser.ts` -> `parseTaskLine`, `src/core/vault-task-index.ts` -> `findMatchingLineIndex`

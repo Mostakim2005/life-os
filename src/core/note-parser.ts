@@ -197,55 +197,10 @@ export function parseDailyNote(
   const taskLines = extractSectionLines(markdown, "Tasks");
   const tasks: TaskItem[] = [];
   taskLines.forEach((line, idx) => {
-    const m = /^\s*-\s*\[([ xX])\]\s*(.+)$/.exec(line);
-    if (!m) return;
-    const done = m[1]!.toLowerCase() === "x";
-    let rest = m[2]!.trim();
-
-    let priority: TaskPriority = "none";
-    if (rest.includes("⏫")) {
-      priority = "high";
-      rest = rest.replace(/⏫/g, "");
-    } else if (rest.includes("🔼")) {
-      priority = "medium";
-      rest = rest.replace(/🔼/g, "");
-    } else if (rest.includes("🔽")) {
-      priority = "low";
-      rest = rest.replace(/🔽/g, "");
-    }
-
-    let recurrence: string | undefined;
-    const repeatMatch = /🔁\s*([^\s📅✅⏫🔼🔽]+(?:\s+[^\s📅✅⏫🔼🔽]+)*)/u.exec(rest);
-    if (repeatMatch && repeatMatch[1]) {
-      recurrence = repeatMatch[1].trim();
-      rest = rest.replace(repeatMatch[0], "");
-    }
-
-    let dueDateIso: string | undefined;
-    const dueMatch = /📅\s*(\d{4}-\d{2}-\d{2})/.exec(rest);
-    if (dueMatch) {
-      dueDateIso = dueMatch[1];
-      rest = rest.replace(dueMatch[0], "");
-    }
-
-    let doneDateIso: string | undefined;
-    const doneMatch = /✅\s*(\d{4}-\d{2}-\d{2})/.exec(rest);
-    if (doneMatch) {
-      doneDateIso = doneMatch[1];
-      rest = rest.replace(doneMatch[0], "");
-    }
-
-    const title = rest.replace(/\s+/g, " ").trim();
-    if (!title) return;
-    tasks.push({
-      id: `task-${idx}-${title.slice(0, 12)}`,
-      title,
-      done,
-      priority,
-      dueDateIso,
-      doneDateIso,
-      recurrence,
-    });
+    const parsed = parseTaskLine(line, `task-${idx}`);
+    if (!parsed) return;
+    parsed.id = `task-${idx}-${parsed.title.slice(0, 12)}`;
+    tasks.push(parsed);
   });
 
   // 6. Timeline
@@ -322,16 +277,98 @@ export function buildHabitsSectionLines(note: ParsedDailyNote, settings: LifeOSS
   return lines;
 }
 
+export function parseTaskLine(line: string, id: string): TaskItem | null {
+  const m = /^\s*[-*]\s*\[([ xX])\]\s*(.+)$/.exec(line);
+  if (!m) return null;
+  const done = m[1]!.toLowerCase() === "x";
+  let rest = m[2]!.trim();
+
+  let priority: TaskPriority = "none";
+  if (/[⏫🔺]/u.test(rest)) {
+    priority = "high";
+    rest = rest.replace(/[⏫🔺]/gu, "");
+  } else if (rest.includes("🔼")) {
+    priority = "medium";
+    rest = rest.replace(/🔼/g, "");
+  } else if (/[🔽⏬]/u.test(rest)) {
+    priority = "low";
+    rest = rest.replace(/[🔽⏬]/gu, "");
+  }
+
+  let startDateIso: string | undefined;
+  const startMatch = /🛫\s*(\d{4}-\d{2}-\d{2})/u.exec(rest);
+  if (startMatch) {
+    startDateIso = startMatch[1];
+    rest = rest.replace(startMatch[0], "");
+  }
+
+  let scheduledDateIso: string | undefined;
+  const scheduledMatch = /⏳\s*(\d{4}-\d{2}-\d{2})/u.exec(rest);
+  if (scheduledMatch) {
+    scheduledDateIso = scheduledMatch[1];
+    rest = rest.replace(scheduledMatch[0], "");
+  }
+
+  let dueDateIso: string | undefined;
+  const dueMatch = /📅\s*(\d{4}-\d{2}-\d{2})/u.exec(rest);
+  if (dueMatch) {
+    dueDateIso = dueMatch[1];
+    rest = rest.replace(dueMatch[0], "");
+  }
+
+  let doneDateIso: string | undefined;
+  const doneMatch = /✅\s*(\d{4}-\d{2}-\d{2})/u.exec(rest);
+  if (doneMatch) {
+    doneDateIso = doneMatch[1];
+    rest = rest.replace(doneMatch[0], "");
+  }
+
+  let recurrence: string | undefined;
+  const repeatMatch = /🔁\s*([^\s📅✅⏳🛫⏫🔼🔽🔺⏬🔁]+(?:\s+[^\s📅✅⏳🛫⏫🔼🔽🔺⏬🔁]+)*)/u.exec(rest);
+  if (repeatMatch && repeatMatch[1]) {
+    recurrence = repeatMatch[1].trim();
+    rest = rest.replace(repeatMatch[0], "");
+  }
+
+  const title = rest.replace(/\s+/g, " ").trim();
+  if (!title) return null;
+
+  const tagSet = new Set<string>();
+  const tagRe = /(?:^|\s)#([\p{L}\p{N}_/-]+)/gu;
+  let tm: RegExpExecArray | null;
+  while ((tm = tagRe.exec(title)) !== null) {
+    if (tm[1]) tagSet.add(tm[1].toLowerCase());
+  }
+  const tags = tagSet.size > 0 ? Array.from(tagSet) : undefined;
+
+  return {
+    id,
+    title,
+    done,
+    priority,
+    dueDateIso,
+    scheduledDateIso,
+    startDateIso,
+    doneDateIso,
+    recurrence,
+    tags,
+  };
+}
+
+export function serializeTaskLine(task: TaskItem, indent = ""): string {
+  const box = task.done ? "[x]" : "[ ]";
+  const prio =
+    task.priority === "high" ? " ⏫" : task.priority === "medium" ? " 🔼" : task.priority === "low" ? " 🔽" : "";
+  const repeat = task.recurrence ? ` 🔁 ${task.recurrence}` : "";
+  const start = task.startDateIso ? ` 🛫 ${task.startDateIso}` : "";
+  const scheduled = task.scheduledDateIso ? ` ⏳ ${task.scheduledDateIso}` : "";
+  const due = task.dueDateIso ? ` 📅 ${task.dueDateIso}` : "";
+  const doneSuffix = task.done && task.doneDateIso ? ` ✅ ${task.doneDateIso}` : "";
+  return `${indent}- ${box} ${task.title}${prio}${repeat}${start}${scheduled}${due}${doneSuffix}`;
+}
+
 export function buildTasksSectionLines(tasks: TaskItem[]): string[] {
-  return tasks.map((t) => {
-    const box = t.done ? "[x]" : "[ ]";
-    const prio =
-      t.priority === "high" ? " ⏫" : t.priority === "medium" ? " 🔼" : t.priority === "low" ? " 🔽" : "";
-    const repeat = t.recurrence ? ` 🔁 ${t.recurrence}` : "";
-    const due = t.dueDateIso ? ` 📅 ${t.dueDateIso}` : "";
-    const doneSuffix = t.done && t.doneDateIso ? ` ✅ ${t.doneDateIso}` : "";
-    return `- ${box} ${t.title}${prio}${repeat}${due}${doneSuffix}`;
-  });
+  return tasks.map((t) => serializeTaskLine(t));
 }
 
 export function buildTimelineSectionLines(blocks: TimelineBlock[]): string[] {

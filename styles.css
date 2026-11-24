@@ -1659,4 +1659,390 @@ body.life-os-glassmorphic .life-os-reflection-input:focus {
   .life-os-tl-layout {
     grid-template-columns: 1fr;
   }
+  .life-os-th-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .life-os-th-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+/* ============================================================
+   Phase 2: Unified Smart Tasks Hub (.life-os-th-*)
+   ============================================================ */
+.life-os-pane-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.life-os-th-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.life-os-th-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.life-os-th-title-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.life-os-th-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.life-os-th-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.life-os-th-summary-overdue {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-error, #ef4444) 16%, transparent);
+  color: var(--text-error, #dc2626);
+  font-weight: 700;
+}
+
+.life-os-th-scope-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.life-os-th-add-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.life-os-th-add-input {
+  flex: 1;
+  min-width: 180px;
+}
+
+.life-os-th-buckets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.life-os-th-bucket-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.life-os-th-bucket-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.life-os-th-bucket-btn.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.life-os-th-bucket-count {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.life-os-th-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.life-os-th-search {
+  flex: 1;
+  min-width: 180px;
+}
+
+.life-os-th-tags-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.life-os-th-tags-bar.is-hidden {
+  display: none;
+}
+
+.life-os-th-tag-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary-alt);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.life-os-th-tag-chip:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.life-os-th-tag-chip.is-active {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 16%, transparent);
+  color: var(--text-normal);
+}
+
+.life-os-th-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.life-os-th-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.life-os-th-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+}
+
+.life-os-th-group-title {
+  font-size: var(--font-ui-small);
+  font-weight: 700;
+  color: var(--text-normal);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.life-os-th-note-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-accent);
+  font-weight: 700;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.life-os-th-note-link:hover {
+  text-decoration: underline;
+}
+
+.life-os-th-group-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.life-os-th-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.life-os-th-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.life-os-th-row:hover {
+  border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
+}
+
+.life-os-th-row.is-overdue {
+  border-left: 3px solid var(--text-error, #ef4444);
+}
+
+.life-os-th-row.is-done {
+  opacity: 0.65;
+}
+
+.life-os-th-row.is-done .life-os-th-title-text {
+  text-decoration: line-through;
+}
+
+.life-os-checkbox {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.life-os-th-prio {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.life-os-th-prio.prio-high {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--background-modifier-border));
+  background: color-mix(in srgb, #ef4444 12%, var(--background-primary));
+  color: var(--text-error, #dc2626);
+}
+
+.life-os-th-prio.prio-medium {
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--background-modifier-border));
+  background: color-mix(in srgb, #f59e0b 12%, var(--background-primary));
+  color: var(--text-warning, #d97706);
+}
+
+.life-os-th-prio.prio-low {
+  border-color: color-mix(in srgb, #3b82f6 40%, var(--background-modifier-border));
+  background: color-mix(in srgb, #3b82f6 10%, var(--background-primary));
+  color: var(--text-accent);
+}
+
+.life-os-th-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.life-os-th-title-text {
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+  line-height: 1.38;
+  word-break: break-word;
+}
+
+.life-os-th-inline-tag {
+  display: inline-block;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 5px;
+  border: none;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  color: var(--text-accent);
+  font-size: 0.85em;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.life-os-th-inline-tag:hover,
+.life-os-th-inline-tag.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.life-os-th-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.life-os-th-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.life-os-th-chip.is-note {
+  cursor: pointer;
+  color: var(--text-accent);
+}
+
+.life-os-th-chip.is-note:hover {
+  border-color: var(--interactive-accent);
+}
+
+.life-os-th-chip.is-overdue {
+  border-color: color-mix(in srgb, var(--text-error, #ef4444) 45%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--text-error, #ef4444) 12%, transparent);
+  color: var(--text-error, #dc2626);
+}
+
+.life-os-th-chip.is-today {
+  border-color: color-mix(in srgb, var(--interactive-accent) 50%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  color: var(--text-normal);
+}
+
+.life-os-th-chip.is-recur {
+  color: var(--text-normal);
+}
+
+.life-os-th-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.life-os-th-mini-btn {
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.life-os-th-mini-btn:hover {
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
 }

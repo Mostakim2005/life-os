@@ -13,6 +13,8 @@ flowchart TB
 
     User([User Habit / Metric / Tab Action]):::startNode --> Cockpit[LifeOSCockpitView]:::processNode
     Cockpit --> NoteParser[Note Parser & Section Builder]:::processNode
+    Cockpit --> TaskHub[VaultTaskIndex & Tasks Hub]:::processNode
+    TaskHub -->|lazy mtime scan & in-place process| VaultFiles[(All Vault Markdown Notes)]:::outputNode
     NoteParser -->|non-destructive inline update| NoteFile[(Daily Note DD-MM-YYYY.md)]:::outputNode
     NoteFile -->|reads history across days| Stats[StatsEngine]:::processNode
     Stats -->|renders zero-dependency SVG charts & calendar dots| Cockpit
@@ -42,7 +44,7 @@ flowchart TB
 ## 3. Core Subsystems & Engineering Mechanics
 
 ### [SUBSYSTEM: Full-Window-Cockpit-View] | Aliases: cockpit tab router, item view manager
-> **1-Line Summary:** Full-window view holding five tabs: Daily Cockpit, Calendar View, Stats & Tracker, Tasks & Timeblocks, and Settings.
+> **1-Line Summary:** Full-window view holding four tabs: Cockpit, Tasks, Schedule & Calendar, and Stats & Tracker.
 * **Code Anchors (Grep Targets):**
   * `src/views.ts` -> `LifeOSCockpitView`
   * `src/main.ts` -> `activateCockpitView`
@@ -103,3 +105,33 @@ graph LR
     end
 ```
 * **Code Anchors (Grep Targets):** `src/main.ts`, `styles.css`
+
+### [SUBSYSTEM: Lazy-Vault-Task-Index-And-Hub] | Aliases: vault task index, tasks hub, mtime cache, smart buckets
+> **1-Line Summary:** On-demand `mtime`-cached Markdown task scanner and interactive Tasks Hub mutating vault task lines safely in place without adding startup cost.
+* **How It Works (Plain English):** Nothing scans vault tasks when Obsidian starts. Opening the `Tasks` tab instantiates `VaultTaskIndex`, reads only modified Markdown files (skipping fenced code blocks and daily-note `## Prayers` / `## Habits` / `## Timeline` sections), and renders `renderTasksHub` with live buckets, tag pills, and instant in-place edits (`app.vault.process`) plus recurring next-instance creation and 1-click scheduling onto today's timeline.
+* **Component Diagram:**
+```mermaid
+flowchart LR
+    classDef uiNode fill:#1d4ed8,stroke:#1e3a8a,color:#ffffff
+    classDef engineNode fill:#0f766e,stroke:#115e59,color:#ffffff
+    classDef storeNode fill:#15803d,stroke:#14532d,color:#ffffff
+
+    TabOpen([User Opens Tasks Tab]):::uiNode --> Index[VaultTaskIndex mtime Cache]:::engineNode
+    Index -->|skips fences and prayer-habit-timeline sections| Hub[renderTasksHub UI]:::uiNode
+    Hub -->|toggle, priority, +1d, delete| Process["In-Place Line Mutation (vault.process)"]:::engineNode
+    Process -->|recurrence rule| RRule["Compute Next Occurrence (rrule)"]:::engineNode
+    Hub -->|schedule 1h block| Timeline["Schedule on Daily Timeline"]:::engineNode
+    Process -->|updates line safely| Notes[(Vault Markdown Notes)]:::storeNode
+    Timeline -->|appends block| Notes
+
+    subgraph Legend["Legend"]
+        L1([Blue = User & Hub UI]):::uiNode
+        L2[Teal = Lazy Index & Mutation Engine]:::engineNode
+        L3[(Green = Markdown Files)]:::storeNode
+    end
+```
+* **Code Anchors (Grep Targets):**
+  * `src/core/note-parser.ts` -> `parseTaskLine`, `serializeTaskLine`
+  * `src/core/vault-task-index.ts` -> `VaultTaskIndex`, `toggleVaultTask`, `cycleVaultTaskPriority`, `postponeVaultTask`
+  * `src/ui/tasks-hub.ts` -> `renderTasksHub`
+  * `src/views.ts` -> `LifeOSCockpitView.renderTasksTab`

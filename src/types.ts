@@ -63,8 +63,11 @@ export interface TaskItem {
   done: boolean;
   priority: TaskPriority;
   dueDateIso?: string;
+  scheduledDateIso?: string;
+  startDateIso?: string;
   doneDateIso?: string;
   recurrence?: string;
+  tags?: string[];
 }
 
 export interface TimelineBlock {

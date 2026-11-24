@@ -8,10 +8,11 @@
 ## 2. Active Features (Do Not Break)
 
 ### [FEATURE: Full-Window-Life-OS-Cockpit] | Aliases: cockpit view, life os cockpit, full window workspace
-> **1-Line Summary:** Dedicated full-window ItemView tab with close protection (auto-pin), ribbon icon, and tabbed navigation across Cockpit, Calendar, Stats, Tasks, and Settings.
+> **1-Line Summary:** Dedicated full-window ItemView tab with close protection (auto-pin), ribbon icon, and tabbed navigation across Cockpit, Tasks, Schedule & Calendar, and Stats & Tracker.
 * **Code Anchors (Grep Targets):**
   * `src/views.ts` -> `LifeOSCockpitView`
   * `src/views.ts` -> `renderCockpitTab`
+  * `src/views.ts` -> `renderTasksTab`
   * `src/views.ts` -> `renderCalendarTab`
   * `src/views.ts` -> `renderStatsTab`
 
@@ -68,7 +69,7 @@
 * **Decision Maker:** `[DECIDED BY: HUMAN]` (Locked in 2026-11-23; reference sources archived in gitignored `_reference-plugins/`).
 * **Phased Rollout Plan:**
   * **Phase 1 — Visual Time-Blocking Timeline & Drag-and-Drop Schedule Grid *(Implemented in v2.1.0)*:** Hourly vertical timeline + 7-day cross-day drag-and-drop week grid + schedule-badged month calendar synced to daily note timeblocks & `adhan-js` prayer windows.
-  * **Phase 2 — Unified Smart Tasks Engine:** Full Tasks-plugin metadata (due/scheduled/start/done dates, priority pills, filters, recurring task auto-generation, vault-wide task aggregation loaded lazily on tab open).
+  * **Phase 2 — Unified Smart Tasks Engine *(Implemented in v2.2.0)*:** Full Tasks-plugin metadata (`⏫`/`🔼`/`🔽`, `🔁` recurrence, `🛫` start, `⏳` scheduled, `📅` due, `✅` done, `#tags`), vault-wide lazy `mtime`-cached task hub, and 1-click timeline scheduling loaded on demand when opening the `Tasks` tab.
   * **Phase 3 — Built-In Pomodoro & Focus Time Tracker:** Session timer + distraction-free focus bar (inspired by `tasknotes`) logging focus minutes directly into daily notes and Stats charts.
   * **Phase 4 — Lazy External Calendar Feeds (ICS / Optional CalDAV):** On-demand `.ics` URL / Google Calendar overlay inside the Calendar tab (lazy-loaded only when Sync is triggered).
 
@@ -87,3 +88,11 @@
 * **User Intention (Non-Negotiable):** Protect user daily note data against accidental migration or bulk resets and provide one-click status bar access to LifeOS Cockpit.
 * **Visual / UI Behavior:** Destructive operations prompt a high-contrast modal with confirm/cancel buttons; status bar pill opens the cockpit view.
 * **Code Anchors (Grep Targets):** `src/ui/confirm-modal.ts`, `src/main.ts`, `styles.css`
+
+### [FEATURE: Unified-Smart-Tasks-Hub] | Aliases: tasks hub, vault tasks, obsidian tasks metadata, tasks tab, postpone, recurring tasks
+> **1-Line Summary:** Lazy-loaded vault-wide Tasks hub with full Obsidian Tasks emoji metadata (`⏫`/`🔼`/`🔽`, `🔁`, `🛫`, `⏳`, `📅`, `✅`, `#tags`), smart buckets, inline priority cycling, `+1d` postpone, NL quick-add, recurring regeneration, and 1-click timeline scheduling.
+* **Code Anchors (Grep Targets):**
+  * `src/core/note-parser.ts` -> `parseTaskLine`, `serializeTaskLine`
+  * `src/core/vault-task-index.ts` -> `VaultTaskIndex`, `toggleVaultTask`, `cycleVaultTaskPriority`, `postponeVaultTask`
+  * `src/ui/tasks-hub.ts` -> `renderTasksHub`
+  * `src/views.ts` -> `LifeOSCockpitView.renderTasksTab`
