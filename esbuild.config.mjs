@@ -14,7 +14,12 @@ const context = await esbuild.context({
 	banner: {
 		js: banner,
 	},
-	entryPoints: ['src/main.ts'],
+	entryPoints: {
+		main: 'src/main.ts',
+		'lifeos-cockpit.chunk': 'src/chunks/cockpit.ts',
+		'lifeos-charts.chunk': 'src/chunks/charts.ts',
+		'lifeos-nlp.chunk': 'src/chunks/nlp.ts',
+	},
 	bundle: true,
 	external: [
 		'obsidian',
@@ -37,7 +42,7 @@ const context = await esbuild.context({
 	logLevel: 'info',
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
-	outfile: 'main.js',
+	outdir: '.',
 	minify: prod,
 });
 

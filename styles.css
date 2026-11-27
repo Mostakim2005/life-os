@@ -571,7 +571,7 @@
    Hybrid Frosted Glassmorphism + Material 3 Styling Tokens
    ========================================================================== */
 
-:root {
+.life-os-viewport {
   --life-os-glass-surface: rgba(var(--mono-rgb-100, 255, 255, 255), 0.70);
   --life-os-glass-surface-subtle: rgba(var(--mono-rgb-100, 255, 255, 255), 0.45);
   --life-os-glass-surface-elevated: rgba(var(--mono-rgb-100, 255, 255, 255), 0.85);
@@ -583,7 +583,7 @@
   --life-os-glass-shadow-lg: 0 16px 36px -6px rgba(0, 0, 0, 0.16), 0 6px 12px -2px rgba(0, 0, 0, 0.08);
 }
 
-.theme-dark {
+.theme-dark .life-os-viewport {
   --life-os-glass-surface: rgba(24, 26, 32, 0.75);
   --life-os-glass-surface-subtle: rgba(18, 20, 24, 0.55);
   --life-os-glass-surface-elevated: rgba(30, 34, 42, 0.85);
@@ -594,7 +594,7 @@
   --life-os-glass-shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
 }
 
-body:not(.life-os-glassmorphic) {
+.life-os-viewport:not(.life-os-glassmorphic) {
   --life-os-glass-surface: var(--background-secondary);
   --life-os-glass-surface-subtle: var(--background-primary);
   --life-os-glass-surface-elevated: var(--background-primary-alt);
@@ -603,9 +603,9 @@ body:not(.life-os-glassmorphic) {
 }
 
 /* Glassmorphic Cockpit Components */
-body.life-os-glassmorphic .life-os-card,
-body.life-os-glassmorphic .life-os-pane,
-body.life-os-glassmorphic .life-os-calendar {
+.life-os-viewport.life-os-glassmorphic .life-os-card,
+.life-os-viewport.life-os-glassmorphic .life-os-pane,
+.life-os-viewport.life-os-glassmorphic .life-os-calendar {
   background: var(--life-os-glass-surface);
   backdrop-filter: var(--life-os-glass-blur);
   -webkit-backdrop-filter: var(--life-os-glass-blur);
@@ -615,17 +615,17 @@ body.life-os-glassmorphic .life-os-calendar {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-body.life-os-glassmorphic .life-os-card:hover,
-body.life-os-glassmorphic .life-os-pane:hover {
+.life-os-viewport.life-os-glassmorphic .life-os-card:hover,
+.life-os-viewport.life-os-glassmorphic .life-os-pane:hover {
   border-color: var(--life-os-glass-border-luminous);
   box-shadow: var(--life-os-glass-shadow-lg);
 }
 
-body.life-os-glassmorphic .life-os-metric-box,
-body.life-os-glassmorphic .life-os-prayer-item,
-body.life-os-glassmorphic .life-os-habit-chip,
-body.life-os-glassmorphic .life-os-block-row,
-body.life-os-glassmorphic .life-os-task-row {
+.life-os-viewport.life-os-glassmorphic .life-os-metric-box,
+.life-os-viewport.life-os-glassmorphic .life-os-prayer-item,
+.life-os-viewport.life-os-glassmorphic .life-os-habit-chip,
+.life-os-viewport.life-os-glassmorphic .life-os-block-row,
+.life-os-viewport.life-os-glassmorphic .life-os-task-row {
   background: var(--life-os-glass-surface-subtle);
   backdrop-filter: var(--life-os-glass-blur);
   -webkit-backdrop-filter: var(--life-os-glass-blur);
@@ -635,17 +635,17 @@ body.life-os-glassmorphic .life-os-task-row {
   border-radius: 10px;
 }
 
-body.life-os-glassmorphic .life-os-metric-box:hover,
-body.life-os-glassmorphic .life-os-prayer-item:hover,
-body.life-os-glassmorphic .life-os-habit-chip:hover,
-body.life-os-glassmorphic .life-os-block-row:hover,
-body.life-os-glassmorphic .life-os-task-row:hover {
+.life-os-viewport.life-os-glassmorphic .life-os-metric-box:hover,
+.life-os-viewport.life-os-glassmorphic .life-os-prayer-item:hover,
+.life-os-viewport.life-os-glassmorphic .life-os-habit-chip:hover,
+.life-os-viewport.life-os-glassmorphic .life-os-block-row:hover,
+.life-os-viewport.life-os-glassmorphic .life-os-task-row:hover {
   background: var(--life-os-glass-surface);
   transform: translateY(-1px);
   border-color: var(--life-os-glass-border-luminous);
 }
 
-body.life-os-glassmorphic .life-os-reflection-input {
+.life-os-viewport.life-os-glassmorphic .life-os-reflection-input {
   background: var(--life-os-glass-surface-subtle);
   backdrop-filter: var(--life-os-glass-blur);
   -webkit-backdrop-filter: var(--life-os-glass-blur);
@@ -653,7 +653,7 @@ body.life-os-glassmorphic .life-os-reflection-input {
   border-radius: 10px;
 }
 
-body.life-os-glassmorphic .life-os-reflection-input:focus {
+.life-os-viewport.life-os-glassmorphic .life-os-reflection-input:focus {
   background: var(--life-os-glass-surface);
   border-color: var(--interactive-accent);
   box-shadow: 0 0 0 2px var(--life-os-glass-border-luminous);

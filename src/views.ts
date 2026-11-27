@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf, normalizePath } from "obsidian";
+import { type App, type EventRef, Notice, TFile, type WorkspaceLeaf, normalizePath } from "obsidian";
 import type { Chart } from "chart.js";
 import type LifeOSPlugin from "./main";
 import type { ParsedDailyNote, PrayerStatus, TaskItem, TaskPriority, TimelineBlock, WaterUnit } from "./types";
@@ -21,7 +21,6 @@ import {
   collectRecentSummaries,
   computeAggregateStats,
 } from "./core/stats-engine";
-import { renderInteractiveChart } from "./core/chartjs-renderer";
 import { computeNextRecurringDate, parseNaturalLanguageTask } from "./core/task-nlp";
 import { formatMinutesHHMM, parseTimeMinutes, snapMinutes } from "./core/timeline-layout";
 import { formatMinutesCompact, logFocusToDailyNote } from "./core/pomodoro-engine";
@@ -55,7 +54,15 @@ const PRAYER_STATUS_OPTIONS: Array<{ value: PrayerStatus; label: string }> = [
   { value: "missed", label: "Missed" },
 ];
 
-export class LifeOSCockpitView extends ItemView {
+export interface CockpitViewHost {
+  app: App;
+  leaf: WorkspaceLeaf;
+  containerEl: HTMLElement;
+  registerEvent: (eventRef: EventRef) => void;
+}
+
+export class LifeOSCockpitController {
+  private host: CockpitViewHost;
   private plugin: LifeOSPlugin;
   private activeTab: CockpitTab = "cockpit";
   private scheduleSubMode: ScheduleSubMode = "day";
@@ -75,24 +82,29 @@ export class LifeOSCockpitView extends ItemView {
   private unsubscribeFocusBar: (() => void) | null = null;
   private activeCharts: Chart[] = [];
 
-  constructor(leaf: WorkspaceLeaf, plugin: LifeOSPlugin) {
-    super(leaf);
+  constructor(host: CockpitViewHost, plugin: LifeOSPlugin) {
+    this.host = host;
     this.plugin = plugin;
   }
 
-  getViewType(): string {
-    return VIEW_TYPE_LIFE_OS;
+  private get app(): App {
+    return this.host.app;
   }
 
-  getDisplayText(): string {
-    return "Life OS Cockpit";
+  private get leaf(): WorkspaceLeaf {
+    return this.host.leaf;
   }
 
-  getIcon(): string {
-    return "layout-dashboard";
+  private get containerEl(): HTMLElement {
+    return this.host.containerEl;
+  }
+
+  private registerEvent(eventRef: EventRef): void {
+    this.host.registerEvent(eventRef);
   }
 
   async onOpen(): Promise<void> {
+    await this.plugin.ensureSettingsReady();
     if (this.plugin.settings.autoPinCockpitTab) {
       this.leaf.setPinned(true);
     }
@@ -254,6 +266,7 @@ export class LifeOSCockpitView extends ItemView {
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
     container.addClass("life-os-viewport");
+    container.toggleClass("life-os-glassmorphic", this.plugin.settings.glassmorphism !== false);
 
     const root = container.createDiv({ cls: "life-os-root" });
     this.renderTopBar(root);
@@ -849,7 +862,11 @@ export class LifeOSCockpitView extends ItemView {
             cleaned = cleaned.replace(/[🔽⏬]/gu, "");
           }
 
-          const { title, dueDateIso, recurrence } = parseNaturalLanguageTask(cleaned, new Date());
+          const { title, dueDateIso, recurrence } = await parseNaturalLanguageTask(
+            this.plugin,
+            cleaned,
+            new Date()
+          );
           if (!title) return;
 
           const todayIso = toISOKey(todayDMY()) ?? undefined;
@@ -873,7 +890,7 @@ export class LifeOSCockpitView extends ItemView {
       },
       onToggleTask: async (entry) => {
         await runTaskMutation(async () => {
-          const res = await toggleVaultTask(this.app, entry);
+          const res = await toggleVaultTask(this.app, entry, this.plugin);
           this.taskIndex?.invalidate(entry.filePath);
           if (res.nextDueIso) {
             new Notice(`Scheduled next recurrence (${res.nextDueIso})`);
@@ -958,12 +975,16 @@ export class LifeOSCockpitView extends ItemView {
     prioSelect.createEl("option", { value: "none", text: "Normal" });
 
     const addBtn = addBar.createEl("button", { text: "+ Task", cls: "life-os-btn-primary" });
-    const submitTask = (): void => {
+    const submitTask = async (): Promise<void> => {
       const rawTitle = titleInput.value.trim();
       if (!rawTitle) return;
 
       const refDate = parseAnyDateKey(this.selectedDateKey) ?? new Date();
-      const { title, dueDateIso, recurrence } = parseNaturalLanguageTask(rawTitle, refDate);
+      const { title, dueDateIso, recurrence } = await parseNaturalLanguageTask(
+        this.plugin,
+        rawTitle,
+        refDate
+      );
       if (!title) return;
 
       note.tasks.push({
@@ -977,9 +998,9 @@ export class LifeOSCockpitView extends ItemView {
       titleInput.value = "";
       void this.persistCurrentNote(true);
     };
-    addBtn.addEventListener("click", submitTask);
+    addBtn.addEventListener("click", () => void submitTask());
     titleInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") submitTask();
+      if (e.key === "Enter") void submitTask();
     });
 
     const list = pane.createDiv({ cls: "life-os-tasks-list" });
@@ -1004,7 +1025,11 @@ export class LifeOSCockpitView extends ItemView {
         if (task.done && task.recurrence) {
           void (async () => {
             const baseDate = parseAnyDateKey(this.selectedDateKey) ?? new Date();
-            const nextDate = computeNextRecurringDate(task.recurrence!, baseDate);
+            const nextDate = await computeNextRecurringDate(
+              this.plugin,
+              task.recurrence!,
+              baseDate
+            );
             const nextKey = formatDateDMY(nextDate);
             const file = await this.plugin.ensureNoteForDate(nextKey);
             await this.app.vault.process(file, (content) => {
@@ -1329,7 +1354,9 @@ export class LifeOSCockpitView extends ItemView {
       box.createDiv({ text: k.sub, cls: "life-os-muted-text" });
     }
 
-    // Charts Grid (Interactive Chart.js Canvases)
+    // Charts Grid (Interactive Chart.js Canvases loaded lazily)
+    const chartsChunk = await this.plugin.ensureChartsChunk();
+    const { renderInteractiveChart } = chartsChunk;
     const chartsGrid = root.createDiv({ cls: "life-os-charts-grid" });
 
     const sleepChartCard = chartsGrid.createDiv({ cls: "life-os-card life-os-accent-sleep" });

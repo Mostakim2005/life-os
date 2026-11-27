@@ -1,25 +1,97 @@
-import { App, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
+import {
+  App,
+  ItemView,
+  normalizePath,
+  Notice,
+  Platform,
+  Plugin,
+  PluginSettingTab,
+  TFile,
+  TFolder,
+  WorkspaceLeaf,
+} from "obsidian";
+import type { LifeOSChartsChunk } from "./chunks/charts";
+import type { LifeOSCockpitChunk } from "./chunks/cockpit";
+import { clearLoadedChunks, loadPluginChunkAsync, scheduleIdleTask } from "./core/chunk-loader";
+import { todayDMY } from "./core/date-format";
+import type { PomodoroEngine, PomodoroSnapshot } from "./core/pomodoro-engine";
 import { DEFAULT_SETTINGS } from "./settings";
-import type { LifeOSSettings, PrayerMethodKey, StorageMode, WaterUnit } from "./types";
-import { todayDMY, toDMYKey } from "./core/date-format";
-import { computePrayerTimesWithAdhan } from "./core/prayer-adhan";
-import { replaceBoundedSection } from "./core/markdown-surgery";
-import { createInitialDailyNoteContent } from "./core/note-parser";
-import { detectObsidianEcosystem } from "./interop/bridges";
-import { exportToLoopHabitsCSV, exportToSuperProductivityJSON } from "./interop/companion-export";
-import {
-  reconcileMobileInbox,
-  writeLoopHabitsExport,
-  writeSuperProductivityExport,
-} from "./interop/inbox-reconciler";
-import { LifeOSCockpitView, VIEW_TYPE_LIFE_OS } from "./views";
-import { ConfirmModal } from "./ui/confirm-modal";
-import {
-  formatMMSS,
-  logFocusToDailyNote,
-  PomodoroEngine,
-  type PomodoroSnapshot,
-} from "./core/pomodoro-engine";
+import type { LifeOSSettings } from "./types";
+import type { LifeOSCockpitController } from "./views";
+
+export const VIEW_TYPE_LIFE_OS = "life-os-cockpit-view";
+
+const COCKPIT_CHUNK = "lifeos-cockpit.chunk.js";
+const CHARTS_CHUNK = "lifeos-charts.chunk.js";
+
+function formatClockMMSS(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+export class LifeOSCockpitView extends ItemView {
+  private plugin: LifeOSPlugin;
+  private controller: LifeOSCockpitController | null = null;
+
+  constructor(leaf: WorkspaceLeaf, plugin: LifeOSPlugin) {
+    super(leaf);
+    this.plugin = plugin;
+  }
+
+  getViewType(): string {
+    return VIEW_TYPE_LIFE_OS;
+  }
+
+  getDisplayText(): string {
+    return "Life OS Cockpit";
+  }
+
+  getIcon(): string {
+    return "layout-dashboard";
+  }
+
+  async onOpen(): Promise<void> {
+    await this.plugin.ensureSettingsReady();
+    const chunk = await this.plugin.ensureCockpitChunk();
+    this.controller = chunk.createCockpitController(this, this.plugin);
+    await this.controller.onOpen();
+  }
+
+  async onClose(): Promise<void> {
+    if (this.controller) {
+      await this.controller.onClose();
+      this.controller = null;
+    }
+  }
+
+  async refreshView(): Promise<void> {
+    await this.controller?.refreshView();
+  }
+
+  async toggleZenFocusMode(force?: boolean): Promise<void> {
+    await this.controller?.toggleZenFocusMode(force);
+  }
+}
+
+class LazyLifeOSSettingTab extends PluginSettingTab {
+  constructor(app: App, private plugin: LifeOSPlugin) {
+    super(app, plugin);
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    const loadingEl = containerEl.createEl("p", { text: "Loading Life OS settings..." });
+    void (async () => {
+      await this.plugin.ensureSettingsReady();
+      const chunk = await this.plugin.ensureCockpitChunk();
+      loadingEl.remove();
+      chunk.renderLifeOSSettingsUI(containerEl, this.app, this.plugin);
+    })();
+  }
+}
 
 export default class LifeOSPlugin extends Plugin {
   settings: LifeOSSettings = {
@@ -29,18 +101,19 @@ export default class LifeOSPlugin extends Plugin {
     pomodoro: { ...DEFAULT_SETTINGS.pomodoro },
   };
   private settingsReady: Promise<void> = Promise.resolve();
+  private cockpitChunk: LifeOSCockpitChunk | null = null;
+  private cockpitPromise: Promise<LifeOSCockpitChunk> | null = null;
+  private chartsPromise: Promise<LifeOSChartsChunk> | null = null;
   private pomodoroEngine: PomodoroEngine | null = null;
   private statusEl: HTMLElement | null = null;
   private unsubscribeStatus: (() => void) | null = null;
+  private cancelIdleTask: (() => void) | null = null;
 
   onload(): void {
-    this.settingsReady = this.loadSettings().then(() => {
-      this.applyThemePreferences();
-    });
+    this.settingsReady = this.loadSettings();
 
     this.registerView(VIEW_TYPE_LIFE_OS, (leaf) => new LifeOSCockpitView(leaf, this));
 
-    // Dedicated left-ribbon button to open the full-window Life OS Cockpit
     this.addRibbonIcon("layout-dashboard", "Open cockpit", () => {
       void this.activateCockpitView();
     });
@@ -57,6 +130,7 @@ export default class LifeOSPlugin extends Plugin {
       id: "open-today-dmy-note",
       name: "Open or create today's note (DD-MM-YYYY)",
       callback: async () => {
+        await this.settingsReady;
         const file = await this.ensureTodayNote();
         await this.app.workspace.getLeaf(false).openFile(file);
       },
@@ -66,29 +140,19 @@ export default class LifeOSPlugin extends Plugin {
       id: "recalculate-prayers-adhan",
       name: "Recalculate today's prayer times (adhan-js)",
       callback: async () => {
-        const dateKey = todayDMY();
-        const times = computePrayerTimesWithAdhan(dateKey, this.settings.prayer);
-        const file = await this.ensureTodayNote();
-        const lines = (["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"] as const).map(
-          (p) => `- [ ] ${p} [time:: ${times[p]}] [status:: ]`
-        );
-        await this.app.vault.process(file, (content) => replaceBoundedSection(content, "Prayers", lines));
-        new Notice(`Updated prayer times for ${dateKey} via adhan-js.`);
+        await this.settingsReady;
+        const chunk = await this.ensureCockpitChunk();
+        await chunk.recalculatePrayersForToday(this.app, this.settings);
       },
     });
 
     this.addCommand({
       id: "migrate-dates-to-dmy",
       name: "Migrate legacy daily notes to DD-MM-YYYY",
-      callback: () => {
-        new ConfirmModal(this.app, {
-          title: "Migrate legacy daily notes to DD-MM-YYYY?",
-          message: "This will rename matching YYYY-MM-DD daily notes in your configured folder to DD-MM-YYYY.",
-          confirmLabel: "Run migration",
-          destructive: true,
-          cssPrefix: "lifeos",
-          onConfirm: () => this.migrateLegacyDateFilenames(),
-        }).open();
+      callback: async () => {
+        await this.settingsReady;
+        const chunk = await this.ensureCockpitChunk();
+        chunk.openLegacyMigrationModal(this.app, this.settings);
       },
     });
 
@@ -96,6 +160,7 @@ export default class LifeOSPlugin extends Plugin {
       id: "export-super-productivity-json",
       name: "Export today's tasks to Super Productivity JSON",
       callback: async () => {
+        await this.settingsReady;
         const outPath = await this.runSuperProductivityExport(todayDMY());
         new Notice(`Exported Super Productivity JSON to ${outPath}`);
       },
@@ -105,6 +170,7 @@ export default class LifeOSPlugin extends Plugin {
       id: "export-loop-habits-csv",
       name: "Export habits to Loop Habit Tracker CSV",
       callback: async () => {
+        await this.settingsReady;
         const outPath = await this.runLoopHabitsExport();
         new Notice(`Exported Loop Habit Tracker CSV to ${outPath}`);
       },
@@ -114,7 +180,9 @@ export default class LifeOSPlugin extends Plugin {
       id: "reconcile-mobile-inbox",
       name: "Reconcile mobile companion .inbox/*.jsonl events",
       callback: async () => {
-        const count = await reconcileMobileInbox(this.app, this.settings, (dk) =>
+        await this.settingsReady;
+        const chunk = await this.ensureCockpitChunk();
+        const count = await chunk.reconcileMobileInbox(this.app, this.settings, (dk) =>
           this.ensureNoteForDate(dk)
         );
         new Notice(
@@ -133,6 +201,7 @@ export default class LifeOSPlugin extends Plugin {
           new Notice("Python analytics is only available on desktop.");
           return;
         }
+        await this.settingsReady;
         await this.runPythonAnalytics();
       },
     });
@@ -140,8 +209,10 @@ export default class LifeOSPlugin extends Plugin {
     this.addCommand({
       id: "toggle-pomodoro-timer",
       name: "Start or pause focus timer",
-      callback: () => {
-        const engine = this.ensurePomodoroEngine();
+      callback: async () => {
+        await this.settingsReady;
+        const chunk = await this.ensureCockpitChunk();
+        const engine = this.ensurePomodoroEngineWithChunk(chunk);
         engine.toggleStartPause();
       },
     });
@@ -155,13 +226,23 @@ export default class LifeOSPlugin extends Plugin {
     });
 
     this.app.workspace.onLayoutReady(() => {
-      void this.settingsReady.then(() =>
-        reconcileMobileInbox(this.app, this.settings, (dk) => this.ensureNoteForDate(dk)).then(
-          (count) => {
-            if (count > 0) new Notice(`Life OS synced ${count} companion event(s).`);
-          }
-        )
-      );
+      this.cancelIdleTask = scheduleIdleTask(() => {
+        void this.settingsReady.then(async () => {
+          const baseFolder = normalizePath(this.settings.dailyNotesFolder || "Life OS");
+          const inboxFolder = this.app.vault.getAbstractFileByPath(normalizePath(`${baseFolder}/.inbox`));
+          if (!(inboxFolder instanceof TFolder)) return;
+          const hasPendingJsonl = inboxFolder.children.some(
+            (child) => child instanceof TFile && child.extension === "jsonl"
+          );
+          if (!hasPendingJsonl) return;
+
+          const chunk = await this.ensureCockpitChunk();
+          const count = await chunk.reconcileMobileInbox(this.app, this.settings, (dk) =>
+            this.ensureNoteForDate(dk)
+          );
+          if (count > 0) new Notice(`Life OS synced ${count} companion event(s).`);
+        });
+      }, 2000);
     });
 
     const statusEl = this.addStatusBarItem();
@@ -179,17 +260,52 @@ export default class LifeOSPlugin extends Plugin {
       }
     });
 
-    this.addSettingTab(new LifeOSSettingTab(this.app, this));
+    this.addSettingTab(new LazyLifeOSSettingTab(this.app, this));
   }
 
   onunload(): void {
-    document.body.removeClass("life-os-glassmorphic");
+    this.cancelIdleTask?.();
+    this.cancelIdleTask = null;
     if (this.unsubscribeStatus) {
       this.unsubscribeStatus();
       this.unsubscribeStatus = null;
     }
     this.pomodoroEngine?.destroy();
     this.pomodoroEngine = null;
+    this.cockpitChunk = null;
+    this.cockpitPromise = null;
+    this.chartsPromise = null;
+    clearLoadedChunks(this.manifest.id);
+  }
+
+  ensureSettingsReady(): Promise<void> {
+    return this.settingsReady;
+  }
+
+  async ensureCockpitChunk(): Promise<LifeOSCockpitChunk> {
+    if (this.cockpitChunk) return this.cockpitChunk;
+    if (!this.cockpitPromise) {
+      this.cockpitPromise = loadPluginChunkAsync<LifeOSCockpitChunk>(this, COCKPIT_CHUNK)
+        .then((mod) => {
+          this.cockpitChunk = mod;
+          return mod;
+        })
+        .catch((err) => {
+          this.cockpitPromise = null;
+          throw err;
+        });
+    }
+    return this.cockpitPromise;
+  }
+
+  async ensureChartsChunk(): Promise<LifeOSChartsChunk> {
+    if (!this.chartsPromise) {
+      this.chartsPromise = loadPluginChunkAsync<LifeOSChartsChunk>(this, CHARTS_CHUNK).catch((err) => {
+        this.chartsPromise = null;
+        throw err;
+      });
+    }
+    return this.chartsPromise;
   }
 
   private updateStatusBarPill(snap?: PomodoroSnapshot): void {
@@ -199,7 +315,7 @@ export default class LifeOSPlugin extends Plugin {
       this.statusEl.setText("Life OS: Cockpit");
       return;
     }
-    const clock = formatMMSS(snap.remainingSeconds);
+    const clock = formatClockMMSS(snap.remainingSeconds);
     const phaseGlyph = snap.phase === "work" ? "🍅" : "☕";
     const statusPrefix = snap.status === "paused" ? "⏸" : phaseGlyph;
     const labelSuffix = snap.targetTitle ? ` · ${snap.targetTitle.slice(0, 18)}` : "";
@@ -209,12 +325,19 @@ export default class LifeOSPlugin extends Plugin {
   }
 
   ensurePomodoroEngine(): PomodoroEngine {
+    if (!this.cockpitChunk) {
+      throw new Error("Cockpit chunk must be loaded before creating PomodoroEngine.");
+    }
+    return this.ensurePomodoroEngineWithChunk(this.cockpitChunk);
+  }
+
+  private ensurePomodoroEngineWithChunk(chunk: LifeOSCockpitChunk): PomodoroEngine {
     if (!this.pomodoroEngine) {
-      this.pomodoroEngine = new PomodoroEngine(
+      this.pomodoroEngine = new chunk.PomodoroEngine(
         () => this.settings.pomodoro,
         async (payload) => {
           if (payload.phase === "work") {
-            const summary = await logFocusToDailyNote(
+            const summary = await chunk.logFocusToDailyNote(
               this.app,
               this.settings,
               () => this.ensureTodayNote(),
@@ -249,11 +372,8 @@ export default class LifeOSPlugin extends Plugin {
     }
   }
 
-  applyThemePreferences(): void {
-    document.body.toggleClass("life-os-glassmorphic", this.settings.glassmorphism !== false);
-  }
-
   async activateCockpitView(toggleZenFocus = false): Promise<void> {
+    await this.settingsReady;
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_LIFE_OS);
     if (existing.length > 0) {
       const targetLeaf = existing[0]!;
@@ -279,44 +399,19 @@ export default class LifeOSPlugin extends Plugin {
   }
 
   async ensureNoteForDate(dateKey: string): Promise<TFile> {
-    const folder = normalizePath(this.settings.dailyNotesFolder || "Life OS");
-    if (!this.app.vault.getAbstractFileByPath(folder)) {
-      await this.app.vault.createFolder(folder);
-    }
-    const path = normalizePath(`${folder}/${dateKey}.md`);
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (existing instanceof TFile) return existing;
-
-    const body = createInitialDailyNoteContent(dateKey, this.settings);
-    return await this.app.vault.create(path, body);
+    const chunk = await this.ensureCockpitChunk();
+    return chunk.ensureNoteForDate(this.app, this.settings, dateKey);
   }
 
   async runSuperProductivityExport(dateKey: string): Promise<string> {
+    const chunk = await this.ensureCockpitChunk();
     const file = await this.ensureNoteForDate(dateKey);
-    return writeSuperProductivityExport(this.app, this.settings, dateKey, file);
+    return chunk.writeSuperProductivityExport(this.app, this.settings, dateKey, file);
   }
 
   async runLoopHabitsExport(): Promise<string> {
-    return writeLoopHabitsExport(this.app, this.settings);
-  }
-
-  async migrateLegacyDateFilenames(): Promise<void> {
-    const folder = normalizePath(this.settings.dailyNotesFolder || "Life OS");
-    const prefix = `${folder}/`;
-    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(prefix));
-    let migrated = 0;
-    for (const file of files) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(file.basename)) {
-        const dmy = toDMYKey(file.basename);
-        if (!dmy) continue;
-        const targetPath = normalizePath(`${folder}/${dmy}.md`);
-        if (!this.app.vault.getAbstractFileByPath(targetPath)) {
-          await this.app.fileManager.renameFile(file, targetPath);
-          migrated++;
-        }
-      }
-    }
-    new Notice(`Migrated ${migrated} legacy YYYY-MM-DD note(s) to DD-MM-YYYY.`);
+    const chunk = await this.ensureCockpitChunk();
+    return chunk.writeLoopHabitsExport(this.app, this.settings);
   }
 
   async runPythonAnalytics(): Promise<void> {
@@ -369,281 +464,5 @@ export default class LifeOSPlugin extends Plugin {
     await this.settingsReady;
     await this.saveData(this.settings);
     this.pomodoroEngine?.syncSettingsDefaultsIfIdle();
-  }
-
-  exportSuperProductivity = exportToSuperProductivityJSON;
-  exportLoopHabits = exportToLoopHabitsCSV;
-}
-
-class LifeOSSettingTab extends PluginSettingTab {
-  constructor(app: App, private plugin: LifeOSPlugin) {
-    super(app, plugin);
-  }
-
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-
-    new Setting(containerEl).setName("Cockpit & Markdown storage").setHeading();
-
-    new Setting(containerEl)
-      .setName("Markdown data storage mode")
-      .setDesc(
-        "Choose inline-only (no YAML properties block, dataview/tracker compatible) or inline + YAML frontmatter."
-      )
-      .addDropdown((d) =>
-        d
-          .addOption("inline-only", "Inline data only (no YAML properties)")
-          .addOption("inline-and-frontmatter", "Inline data + YAML frontmatter (iso date)")
-          .setValue(this.plugin.settings.storageMode)
-          .onChange(async (val) => {
-            this.plugin.settings.storageMode = val as StorageMode;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Auto-pin cockpit tab (close protection)")
-      .setDesc("Automatically pins the Life OS Cockpit tab so it stays open while you browse notes.")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.autoPinCockpitTab).onChange(async (val) => {
-          this.plugin.settings.autoPinCockpitTab = val;
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Glassmorphic theme styling")
-      .setDesc("Enable frosted glass surfaces and vibrant module color accents.")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.glassmorphism).onChange(async (val) => {
-          this.plugin.settings.glassmorphism = val;
-          this.plugin.applyThemePreferences();
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl).setName("Hydration & sleep targets").setHeading();
-
-    new Setting(containerEl)
-      .setName("Default hydration unit")
-      .setDesc("Switch between glasses (0–10) and water bottles (0.5-bottle increments).")
-      .addDropdown((d) =>
-        d
-          .addOption("glasses", "Glasses (0–10)")
-          .addOption("bottle", "Water Bottle (0.5 increments)")
-          .setValue(this.plugin.settings.waterUnit)
-          .onChange(async (val) => {
-            this.plugin.settings.waterUnit = val as WaterUnit;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Water bottle capacity (liters)")
-      .setDesc("Capacity of your water bottle in liters (e.g., 1.1 for a bottle slightly over 1L).")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.bottleVolumeLiters)).onChange(async (val) => {
-          const n = Number(val);
-          if (!Number.isNaN(n) && n >= 0.25 && n <= 5) {
-            this.plugin.settings.bottleVolumeLiters = n;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Daily water target (liters)")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.waterTargetLiters)).onChange(async (val) => {
-          const n = Number(val);
-          if (!Number.isNaN(n) && n >= 0.5 && n <= 10) {
-            this.plugin.settings.waterTargetLiters = n;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Daily sleep target (hours, 1–10)")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.sleepTargetHours)).onChange(async (val) => {
-          const n = Number(val);
-          if (!Number.isNaN(n) && n >= 1 && n <= 10) {
-            this.plugin.settings.sleepTargetHours = Math.round(n * 2) / 2;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Default daily habits")
-      .setDesc("Comma-separated list of habits shown in every new daily note.")
-      .addText((t) =>
-        t.setValue(this.plugin.settings.customHabits.join(", ")).onChange(async (val) => {
-          const parsed = val
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          if (parsed.length > 0) {
-            this.plugin.settings.customHabits = parsed;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl).setName("Prayer schedule (adhan-js)").setHeading();
-
-    const eco = detectObsidianEcosystem(this.app);
-    containerEl.createEl("p", {
-      text: `Optional companion plugins detected: Tasks(${eco.tasks ? "on" : "off"}), Day Planner(${eco.dayPlanner ? "on" : "off"}), Periodic Notes(${eco.periodicNotes ? "on" : "off"}), Dataview(${eco.dataview ? "on" : "off"}), Tracker(${eco.tracker ? "on" : "off"}). All core features are now built directly into Life OS.`,
-    });
-
-    new Setting(containerEl)
-      .setName("Prayer calculation method")
-      .addDropdown((d) =>
-        d
-          .addOption("Karachi", "University of Islamic Sciences, Karachi")
-          .addOption("MuslimWorldLeague", "Muslim World League")
-          .addOption("UmmAlQura", "Umm al-Qura")
-          .addOption("Egyptian", "Egyptian")
-          .addOption("NorthAmerica", "ISNA (North America)")
-          .setValue(this.plugin.settings.prayer.method)
-          .onChange(async (val) => {
-            this.plugin.settings.prayer.method = val as PrayerMethodKey;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Asr Madhab")
-      .addDropdown((d) =>
-        d
-          .addOption("hanafi", "Hanafi")
-          .addOption("shafi", "Shafi / Standard")
-          .setValue(this.plugin.settings.prayer.madhab)
-          .onChange(async (val) => {
-            this.plugin.settings.prayer.madhab = val as "hanafi" | "shafi";
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Latitude")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.prayer.latitude)).onChange(async (val) => {
-          const n = Number(val);
-          if (!Number.isNaN(n) && n >= -90 && n <= 90) {
-            this.plugin.settings.prayer.latitude = n;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Longitude")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.prayer.longitude)).onChange(async (val) => {
-          const n = Number(val);
-          if (!Number.isNaN(n) && n >= -180 && n <= 180) {
-            this.plugin.settings.prayer.longitude = n;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl).setName("Pomodoro & focus timer").setHeading();
-
-    new Setting(containerEl)
-      .setName("Focus duration (minutes)")
-      .setDesc("Length of each work sprint (1–180 minutes).")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.pomodoro.workMinutes)).onChange(async (val) => {
-          const n = Math.round(Number(val));
-          if (!Number.isNaN(n) && n >= 1 && n <= 180) {
-            this.plugin.settings.pomodoro.workMinutes = n;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Short break (minutes)")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.pomodoro.shortBreakMinutes)).onChange(async (val) => {
-          const n = Math.round(Number(val));
-          if (!Number.isNaN(n) && n >= 1 && n <= 60) {
-            this.plugin.settings.pomodoro.shortBreakMinutes = n;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Long break (minutes)")
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.pomodoro.longBreakMinutes)).onChange(async (val) => {
-          const n = Math.round(Number(val));
-          if (!Number.isNaN(n) && n >= 1 && n <= 90) {
-            this.plugin.settings.pomodoro.longBreakMinutes = n;
-            await this.plugin.saveSettings();
-          }
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Daily focus goal (minutes)")
-      .setDesc("Goal target line displayed on the Focus Minutes chart and progress bar.")
-      .addText((t) =>
-        t
-          .setValue(String(this.plugin.settings.pomodoro.dailyFocusTargetMinutes))
-          .onChange(async (val) => {
-            const n = Math.round(Number(val));
-            if (!Number.isNaN(n) && n >= 10 && n <= 720) {
-              this.plugin.settings.pomodoro.dailyFocusTargetMinutes = n;
-              await this.plugin.saveSettings();
-            }
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Play completion chime")
-      .setDesc("Play a soft gentle chime when a focus sprint or break ends.")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.pomodoro.soundEnabled).onChange(async (val) => {
-          this.plugin.settings.pomodoro.soundEnabled = val;
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Log completed sessions to timeline")
-      .setDesc("Automatically append finished focus sprints to today's Timeline section.")
-      .addToggle((t) =>
-        t
-          .setValue(this.plugin.settings.pomodoro.logTimeblockOnComplete)
-          .onChange(async (val) => {
-            this.plugin.settings.pomodoro.logTimeblockOnComplete = val;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Auto-start breaks")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.pomodoro.autoStartBreaks).onChange(async (val) => {
-          this.plugin.settings.pomodoro.autoStartBreaks = val;
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Auto-start next focus session")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.pomodoro.autoStartWork).onChange(async (val) => {
-          this.plugin.settings.pomodoro.autoStartWork = val;
-          await this.plugin.saveSettings();
-        })
-      );
   }
 }

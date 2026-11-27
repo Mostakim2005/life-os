@@ -8,9 +8,10 @@
 # npm
 node_modules
 
-# Don't include the compiled main.js file in the repo.
+# Don't include the compiled main.js or runtime chunks in the repo.
 # They should be uploaded to GitHub releases instead.
 main.js
+*.chunk.js
 
 # Exclude sourcemaps
 *.map
@@ -27,4 +28,3 @@ data.json
 
 # Local reference source code for feasibility analysis (never committed)
 _reference-plugins/
-

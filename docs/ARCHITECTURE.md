@@ -46,22 +46,26 @@ flowchart TB
 ## 3. Core Subsystems & Engineering Mechanics
 
 ### [SUBSYSTEM: Full-Window-Cockpit-View] | Aliases: cockpit tab router, item view manager
-> **1-Line Summary:** Full-window view holding four tabs: Cockpit, Tasks, Schedule & Calendar, and Stats & Tracker.
+> **1-Line Summary:** Thin <14 KB `ItemView` startup shell that lazily loads `lifeos-cockpit.chunk.js` (`LifeOSCockpitController`), holding four tabs: Cockpit, Tasks, Schedule & Calendar, and Stats & Tracker.
 * **Code Anchors (Grep Targets):**
-  * `src/views.ts` -> `LifeOSCockpitView`
-  * `src/main.ts` -> `activateCockpitView`
+  * `src/main.ts :: LifeOSCockpitView`
+  * `src/views.ts :: LifeOSCockpitController`
+  * `src/core/chunk-loader.ts :: loadPluginChunkAsync`
+  * `src/main.ts :: LifeOSPlugin.activateCockpitView`
 
 ### [SUBSYSTEM: Interactive-ChartJS-Renderer] | Aliases: chartjs canvas, stats renderer
-> **1-Line Summary:** Mounts interactive Chart.js canvases with tooltips, dark/light theme switching, and lifecycle memory destruction.
+> **1-Line Summary:** Lazy `lifeos-charts.chunk.js` bundle using tree-shaken named `chart.js` ESM imports (`BarController` + `LineController` only) with tooltips, dark/light theme switching, and lifecycle memory destruction.
 * **Code Anchors (Grep Targets):**
-  * `src/core/chartjs-renderer.ts` -> `renderInteractiveChart`
-  * `src/views.ts` -> `destroyActiveCharts`
+  * `src/chunks/charts.ts :: renderInteractiveChart`
+  * `src/core/chartjs-renderer.ts :: renderInteractiveChart`
+  * `src/views.ts :: LifeOSCockpitController.destroyActiveCharts`
 
 ### [SUBSYSTEM: Task-NLP-And-Recurrence] | Aliases: natural language dates, recurring rules
-> **1-Line Summary:** Parses human date phrases from task titles and schedules next recurrence on completion.
+> **1-Line Summary:** Pure-TS fast paths for common recurring intervals (`daily`/`weekday`/`weekly`/`monthly`) with on-demand `lifeos-nlp.chunk.js` loading for `chrono-node` and complex `rrule` parsing.
 * **Code Anchors (Grep Targets):**
-  * `src/core/task-nlp.ts` -> `parseNaturalLanguageTask`
-  * `src/core/task-nlp.ts` -> `computeNextRecurringDate`
+  * `src/core/task-nlp.ts :: parseNaturalLanguageTask`
+  * `src/core/task-nlp.ts :: computeNextRecurringDate`
+  * `src/chunks/nlp.ts :: parseChronoFirstDate`
 
 ### [SUBSYSTEM: Note-Parser-And-Section-Builder] | Aliases: note parser, inline field extractor
 > **1-Line Summary:** Surgical regex and block parser extracting and updating sleep, water, prayers, habits, tasks, and timeblocks.

@@ -46,10 +46,16 @@
 * **Protected Code Anchors (Grep Targets):** `src/main.ts` -> `onload`, `settingsReady`
 
 
-### [DECISION: Pure-TS-Schedule-And-Lazy-Chart-NLP] | Aliases: lazy chartjs, lazy chrono, pure ts timeline, no react svelte bloat
-> **1-Line Summary:** Built Phase 1 Day Timeline and Week Grid in pure TypeScript (`src/core/timeline-layout.ts`, `src/ui/schedule-planner.ts`) rather than importing React/Svelte/FullCalendar, and moved `chart.js`, `chrono-node`, and `rrule` behind on-demand `require()` thunks so Obsidian startup stays <15 ms.
+### [DECISION: Pure-TS-Schedule-And-Lazy-Chart-NLP] | Aliases: lazy chartjs, lazy chrono, pure ts timeline, no react svelte bloat, chunk splitting
+> **1-Line Summary:** Split `Life OS` into a 13 KB `main.js` startup shell plus on-demand chunks (`lifeos-cockpit.chunk.js`, tree-shaken `lifeos-charts.chunk.js` with Bar+Line only, and `lifeos-nlp.chunk.js` for `chrono-node`/`rrule`), scoped `.life-os-glassmorphic` off `document.body`, replaced `vault.getFiles()` inbox scans with direct `.inbox` `TFolder` lookup on `requestIdleCallback`, and fixed the `onOpen()` `settingsReady` await race.
 * **Decision Maker:** `[DECIDED BY: HUMAN]`
-* **Protected Code Anchors (Grep Targets):** `src/core/chartjs-renderer.ts` -> `getChartConstructor`, `src/core/task-nlp.ts` -> `getChrono`, `src/core/timeline-layout.ts` -> `computeOverlapLayout`
+* **Protected Code Anchors (Grep Targets):**
+  * `src/core/chunk-loader.ts :: loadPluginChunkAsync`
+  * `src/core/chartjs-renderer.ts :: getChartConstructor`
+  * `src/core/task-nlp.ts :: parseNaturalLanguageTask`
+  * `src/interop/inbox-reconciler.ts :: reconcileMobileInbox`
+  * `src/views.ts :: LifeOSCockpitController.onOpen`
+  * `src/core/timeline-layout.ts :: computeOverlapLayout`
 
 ### [DECISION: Lazy-Mtime-Vault-Task-Index] | Aliases: vault tasks scan, lazy task index, startup zero cost
 > **1-Line Summary:** Deferred vault-wide Markdown task scanning completely out of `onload()` into an on-demand `VaultTaskIndex` instantiated only when opening the `Tasks` tab, using per-file `mtime` caching and skipping fenced code blocks and daily-note `## Prayers` / `## Habits` / `## Timeline` sections.

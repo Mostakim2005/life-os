@@ -1,4 +1,4 @@
-import { normalizePath, TFile, type App } from "obsidian";
+import { normalizePath, TFile, TFolder, type App } from "obsidian";
 import type { DailyRecord, LifeOSSettings, PrayerStatus } from "../types";
 import { formatDateDMY, parseAnyDateKey, toISOKey } from "../core/date-format";
 import {
@@ -52,17 +52,18 @@ export async function reconcileMobileInbox(
   ensureNoteForDate: (dateKey: string) => Promise<TFile>
 ): Promise<number> {
   const baseFolder = normalizePath(settings.dailyNotesFolder || "Life OS");
-  const inboxPrefix = `${baseFolder}/.inbox/`;
+  const inboxFolderPath = normalizePath(`${baseFolder}/.inbox`);
   const processedFolder = normalizePath(`${baseFolder}/.inbox/processed`);
 
-  const jsonlFiles = app.vault
-    .getFiles()
-    .filter(
-      (f) =>
-        f.path.startsWith(inboxPrefix) &&
-        !f.path.startsWith(`${processedFolder}/`) &&
-        f.extension === "jsonl"
-    );
+  const inboxFolder = app.vault.getAbstractFileByPath(inboxFolderPath);
+  const jsonlFiles: TFile[] = [];
+  if (inboxFolder instanceof TFolder) {
+    for (const child of inboxFolder.children) {
+      if (child instanceof TFile && child.extension === "jsonl") {
+        jsonlFiles.push(child);
+      }
+    }
+  }
 
   if (jsonlFiles.length === 0) return 0;
   await ensureFolder(app, processedFolder);

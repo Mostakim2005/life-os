@@ -10,11 +10,12 @@
 ### [FEATURE: Full-Window-Life-OS-Cockpit] | Aliases: cockpit view, life os cockpit, full window workspace
 > **1-Line Summary:** Dedicated full-window ItemView tab with close protection (auto-pin), ribbon icon, and tabbed navigation across Cockpit, Tasks, Schedule & Calendar, and Stats & Tracker.
 * **Code Anchors (Grep Targets):**
-  * `src/views.ts` -> `LifeOSCockpitView`
-  * `src/views.ts` -> `renderCockpitTab`
-  * `src/views.ts` -> `renderTasksTab`
-  * `src/views.ts` -> `renderCalendarTab`
-  * `src/views.ts` -> `renderStatsTab`
+  * `src/main.ts :: LifeOSCockpitView`
+  * `src/views.ts :: LifeOSCockpitController`
+  * `src/views.ts :: LifeOSCockpitController.renderCockpitTab`
+  * `src/views.ts :: LifeOSCockpitController.renderTasksTab`
+  * `src/views.ts :: LifeOSCockpitController.renderCalendarTab`
+  * `src/views.ts :: LifeOSCockpitController.renderStatsTab`
 
 ### [FEATURE: Sleep-And-Hydration-Vitals] | Aliases: sleep stepped pills, hydration bottle glass toggle
 > **1-Line Summary:** Strict stepped sleep tracking (1.0h to 10.0h in 0.5h increments) and dual hydration tracking (glasses 0-10 or bottles 0-5.0 with configurable liter capacity).

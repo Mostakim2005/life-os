@@ -1,4 +1,4 @@
-import { normalizePath, type App, type TFile } from "obsidian";
+import { normalizePath, type App, type Plugin, type TFile } from "obsidian";
 import type { LifeOSSettings, TaskItem, TaskPriority } from "../types";
 import { formatDateDMY, parseAnyDateKey, todayDMY, toISOKey } from "./date-format";
 import {
@@ -7,7 +7,7 @@ import {
   parseTaskLine,
   serializeTaskLine,
 } from "./note-parser";
-import { computeNextRecurringDate } from "./task-nlp";
+import { computeNextRecurringDate, computeSimpleRecurringDate } from "./task-nlp";
 
 export interface VaultTaskEntry {
   filePath: string;
@@ -163,10 +163,18 @@ function findMatchingLineIndex(lines: string[], entry: VaultTaskEntry): number {
 
 export async function toggleVaultTask(
   app: App,
-  entry: VaultTaskEntry
+  entry: VaultTaskEntry,
+  plugin?: Plugin
 ): Promise<{ completed: boolean; nextDueIso?: string }> {
   const file = getMarkdownFile(app, entry.filePath);
   if (!file) return { completed: entry.task.done };
+
+  let precomputedNextDate: Date | null = null;
+  if (!entry.task.done && entry.task.recurrence && plugin) {
+    const anchorIso = entry.task.dueDateIso ?? entry.task.scheduledDateIso;
+    const baseDate = (anchorIso ? parseAnyDateKey(anchorIso) : null) ?? new Date();
+    precomputedNextDate = await computeNextRecurringDate(plugin, entry.task.recurrence, baseDate);
+  }
 
   let result: { completed: boolean; nextDueIso?: string } = { completed: entry.task.done };
 
@@ -191,7 +199,13 @@ export async function toggleVaultTask(
     if (nowDone && current.recurrence) {
       const anchorIso = current.dueDateIso ?? current.scheduledDateIso;
       const baseDate = (anchorIso ? parseAnyDateKey(anchorIso) : null) ?? new Date();
-      const nextDate = computeNextRecurringDate(current.recurrence, baseDate);
+      let nextDate = precomputedNextDate && current.recurrence === entry.task.recurrence
+        ? precomputedNextDate
+        : computeSimpleRecurringDate(current.recurrence, baseDate);
+      if (!nextDate) {
+        nextDate = new Date(baseDate.getTime());
+        nextDate.setDate(nextDate.getDate() + 1);
+      }
       const nextIso = toISOKey(formatDateDMY(nextDate)) ?? undefined;
 
       const nextTask: TaskItem = {

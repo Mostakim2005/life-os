@@ -1,25 +1,34 @@
-import type { Chart as ChartType } from "chart.js";
+import {
+  BarController,
+  BarElement,
+  CategoryScale,
+  Chart,
+  Legend,
+  LinearScale,
+  LineController,
+  LineElement,
+  PointElement,
+  Tooltip,
+} from "chart.js";
 import type { DayStatSummary } from "./stats-engine";
 
 let chartRegistered = false;
-function getChartConstructor(): typeof ChartType {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Deferred load avoids initializing Chart.js during Obsidian startup
-  const mod = require("chart.js") as typeof import("chart.js");
+function getChartConstructor(): typeof Chart {
   if (!chartRegistered) {
     chartRegistered = true;
-    mod.Chart.register(
-      mod.BarController,
-      mod.LineController,
-      mod.BarElement,
-      mod.LineElement,
-      mod.PointElement,
-      mod.LinearScale,
-      mod.CategoryScale,
-      mod.Tooltip,
-      mod.Legend
+    Chart.register(
+      BarController,
+      LineController,
+      BarElement,
+      LineElement,
+      PointElement,
+      LinearScale,
+      CategoryScale,
+      Tooltip,
+      Legend
     );
   }
-  return mod.Chart;
+  return Chart;
 }
 
 export interface ChartJsMetricOptions {
@@ -56,8 +65,8 @@ export function renderInteractiveChart(
   container: HTMLElement,
   summaries: DayStatSummary[],
   options: ChartJsMetricOptions
-): ChartType {
-  const Chart = getChartConstructor();
+): Chart {
+  const ChartCtor = getChartConstructor();
   const canvas = container.createEl("canvas", { cls: "life-os-chart-canvas" });
 
   const { textColor, gridColor, fontFamily } = getObsidianThemePalette();
@@ -65,7 +74,7 @@ export function renderInteractiveChart(
   const data = summaries.map((s) => (s.exists ? options.getValue(s) ?? 0 : 0));
 
   // Base bar dataset
-  const datasets: ChartType["data"]["datasets"] = [
+  const datasets: Chart["data"]["datasets"] = [
     {
       type: "bar",
       label: options.label,
@@ -91,7 +100,7 @@ export function renderInteractiveChart(
     });
   }
 
-  const chart = new Chart(canvas, {
+  const chart = new ChartCtor(canvas, {
     type: "bar",
     data: {
       labels,
